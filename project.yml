@@ -13,8 +13,8 @@ targets:
     platform: iOS
     sources:
       - Sources/IVEX07Order
-    resources:
-      - Resources
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ivex07.order
