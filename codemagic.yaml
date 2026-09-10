@@ -27,3 +27,34 @@ workflows:
     artifacts:
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/*.app
       - /tmp/xcodebuild_logs/*.log
+
+  ivex-ios-app-store:
+    name: IVEX iPhone - signed App Store
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ivex07.order
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+      - name: Generate Xcode project
+        script: |
+          cd "$CM_BUILD_DIR"
+          xcodegen generate
+      - name: Apply signing profiles
+        script: |
+          cd "$CM_BUILD_DIR"
+          xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          cd "$CM_BUILD_DIR"
+          xcode-project build-ipa \
+            --project IVEX07Order.xcodeproj \
+            --scheme IVEX07Order
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
