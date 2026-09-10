@@ -22,11 +22,8 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         TARGETED_DEVICE_FAMILY: "1"
-        INFOPLIST_KEY_CFBundleDisplayName: IVEX07 Order
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: IVEX07 Order използва снимките само към избрания продукт.
-        INFOPLIST_KEY_NSCameraUsageDescription: IVEX07 Order използва камерата за снимка на продукт или визитка.
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     scheme:
       testTargets: []
