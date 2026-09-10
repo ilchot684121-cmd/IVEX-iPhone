@@ -32,6 +32,8 @@ workflows:
     name: IVEX iPhone - signed App Store
     instance_type: mac_mini_m2
     max_build_duration: 60
+    integrations:
+      app_store_connect: Codemagic IVEX New
     environment:
       xcode: latest
       ios_signing:
@@ -58,3 +60,6 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
