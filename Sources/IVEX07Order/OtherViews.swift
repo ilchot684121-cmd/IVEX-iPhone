@@ -43,28 +43,63 @@ struct HistoryView: View {
 }
 
 struct ExcelView: View {
+    @EnvironmentObject private var model: OrderStore
+    @State private var exportURL: URL?
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: "tablecells.fill").font(.system(size: 62)).foregroundStyle(IVEXTheme.green)
             Text("Excel експорт").font(.title2).bold()
-            Text("В следващия етап добавяме същия Excel файл като в Android и изпращането към IVEX Office.")
+            Text("Експортирай всички магазини и изпрати файла към IVEX Office.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
+            if let exportURL {
+                ShareLink(item: exportURL) {
+                    Label("Изпрати файла", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity).padding(12)
+                }.buttonStyle(.borderedProminent).tint(IVEXTheme.green)
+            } else {
+                Button("Създай Excel/CSV файл") { exportURL = model.csvURL() }
+                    .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
+            }
         }.padding().navigationTitle("Excel")
     }
 }
 
 struct AboutView: View {
+    @EnvironmentObject private var model: OrderStore
     var body: some View {
-        ScrollView {
+        ProfileView(isFirstLaunch: false)
+    }
+}
+
+struct ProfileView: View {
+    @EnvironmentObject private var model: OrderStore
+    @State private var profile = ClientProfile()
+    let isFirstLaunch: Bool
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
             VStack(spacing: 18) {
                 Image(systemName: "cart.fill").font(.system(size: 68)).foregroundStyle(IVEXTheme.green)
                 Text("IVEX07 ORDER").font(.largeTitle).bold().foregroundStyle(IVEXTheme.navy)
                 Text("Система за поръчки и доставки от Китай").multilineTextAlignment(.center)
-                GroupBox("iPhone версия 0.1") {
-                    Text("Първи работещ етап: магазини, продукти, количества, RMB, кубици, история и локално запазване.")
+                GroupBox(isFirstLaunch ? "Регистрация на клиента" : "Моят профил") {
+                    VStack(spacing: 12) {
+                        TextField("Име и фамилия", text: $profile.name).textFieldStyle(.roundedBorder)
+                        TextField("Фирма", text: $profile.company).textFieldStyle(.roundedBorder)
+                        TextField("Телефон", text: $profile.phone).textFieldStyle(.roundedBorder).keyboardType(.phonePad)
+                        TextField("Имейл", text: $profile.email).textFieldStyle(.roundedBorder).keyboardType(.emailAddress).textInputAutocapitalization(.never)
+                        Button(isFirstLaunch ? "Започни работа" : "Запази промените") { model.saveProfile(profile) }
+                            .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
+                            .disabled(!profile.isComplete)
+                    }.padding(.top, 8)
+                }
+                GroupBox("iPhone версия 0.2") {
+                    Text("Магазини, продукти със снимки, количества, RMB, кубици, статуси, история и Excel/CSV експорт.")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }.padding()
-        }.navigationTitle("За IVEX")
+            }.navigationTitle(isFirstLaunch ? "Добре дошли" : "Профил")
+        }.onAppear { profile = model.profile }
     }
 }
