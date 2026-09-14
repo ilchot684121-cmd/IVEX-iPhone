@@ -22,11 +22,23 @@ struct ProductLine: Identifiable, Codable, Equatable {
     var note = ""
     var status: ProductStatus = .newOrder
     var statusNote = ""
+    var photoData: Data?
 
     var totalQuantity: Double { cartons * piecesPerCarton }
     var totalPrice: Double { totalQuantity * unitPrice }
     var totalCBM: Double { cartons * cbmPerCarton }
     var hasOrderData: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+struct ClientProfile: Codable, Equatable {
+    var name = ""
+    var company = ""
+    var phone = ""
+    var email = ""
+
+    var isComplete: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 struct StoreOrder: Identifiable, Codable, Equatable {
