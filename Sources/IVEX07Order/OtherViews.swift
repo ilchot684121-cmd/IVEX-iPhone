@@ -92,10 +92,13 @@ struct ProfileView: View {
                         Button(isFirstLaunch ? "Започни работа" : "Запази промените") { model.saveProfile(profile) }
                             .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
                             .disabled(!profile.isComplete)
+                        if !model.syncMessage.isEmpty {
+                            Text(model.syncMessage).font(.caption).foregroundStyle(.secondary)
+                        }
                     }.padding(.top, 8)
                 }
-                GroupBox("iPhone версия 0.2") {
-                    Text("Магазини, продукти със снимки, количества, RMB, кубици, статуси, история и Excel/CSV експорт.")
+                GroupBox("iPhone версия 0.3") {
+                    Text("Регистрация и изпращане на поръчките към IVEX Office, магазини, продукти със снимки, RMB, кубици, статуси, история и Excel/CSV експорт.")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }.padding()

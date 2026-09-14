@@ -7,8 +7,12 @@ final class OrderStore: ObservableObject {
     @Published var stores: [StoreOrder] = []
     @Published var selectedStoreID: UUID?
     @Published var history: [StoreOrder] = []
+    @Published var isSyncing = false
+    @Published var syncMessage = ""
 
     private let fileURL: URL
+    private var clientID = UUID().uuidString
+    private let syncService = FirebaseSyncService()
 
     init() {
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -45,6 +49,20 @@ final class OrderStore: ObservableObject {
     func saveProfile(_ updated: ClientProfile) {
         profile = updated
         save()
+        Task { await registerProfile() }
+    }
+
+    func registerProfile() async {
+        guard profile.isComplete else { return }
+        isSyncing = true
+        syncMessage = "Регистрацията се изпраща..."
+        do {
+            try await syncService.register(profile: profile, clientID: clientID)
+            syncMessage = "Регистрацията е получена в офиса"
+        } catch {
+            syncMessage = "Няма връзка. Данните са запазени в телефона."
+        }
+        isSyncing = false
     }
 
     func deleteProduct(_ productID: UUID, from storeID: UUID) {
@@ -73,6 +91,20 @@ final class OrderStore: ObservableObject {
         save()
     }
 
+    func sendAndCompleteShopping() async throws {
+        let orders = stores.filter { !$0.usedProducts.isEmpty }
+        guard !orders.isEmpty else { return }
+        isSyncing = true
+        syncMessage = "Изпращане към IVEX Office..."
+        defer { isSyncing = false }
+        try await syncService.register(profile: profile, clientID: clientID)
+        for order in orders {
+            try await syncService.send(order: order, profile: profile, clientID: clientID)
+        }
+        syncMessage = "Поръчката е получена в офиса"
+        completeShopping()
+    }
+
     func reorder(_ archived: StoreOrder) {
         var copy = archived
         copy.id = UUID()
@@ -95,13 +127,14 @@ final class OrderStore: ObservableObject {
     private struct Snapshot: Codable {
         var profile: ClientProfile?
         var clientName: String?
+        var clientID: String?
         var stores: [StoreOrder]
         var selectedStoreID: UUID?
         var history: [StoreOrder]
     }
 
     private func save() {
-        let snapshot = Snapshot(profile: profile, clientName: nil, stores: stores, selectedStoreID: selectedStoreID, history: history)
+        let snapshot = Snapshot(profile: profile, clientName: nil, clientID: clientID, stores: stores, selectedStoreID: selectedStoreID, history: history)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
@@ -110,6 +143,7 @@ final class OrderStore: ObservableObject {
         guard let data = try? Data(contentsOf: fileURL),
               let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         profile = snapshot.profile ?? ClientProfile(name: snapshot.clientName ?? "")
+        clientID = snapshot.clientID ?? UUID().uuidString
         stores = snapshot.stores
         selectedStoreID = snapshot.selectedStoreID
         history = snapshot.history

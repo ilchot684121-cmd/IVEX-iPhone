@@ -14,7 +14,7 @@ enum IVEXSyncError: LocalizedError {
     }
 }
 
-struct FirebaseSyncService {
+struct FirebaseSyncService: Sendable {
     private let projectID = "ivex07-cloud"
     private let databaseID = "(default)"
 

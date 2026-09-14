@@ -5,6 +5,8 @@ struct OrderView: View {
     @EnvironmentObject private var model: OrderStore
     @State private var editingStore: StoreOrder?
     @State private var showAddProduct = false
+    @State private var showSendConfirmation = false
+    @State private var sendError = ""
 
     var body: some View {
         ScrollView {
@@ -20,11 +22,16 @@ struct OrderView: View {
                     }
                     .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
                 }
-                Button(role: .destructive) { model.completeShopping() } label: {
-                    Label("Приключи текущото пазаруване", systemImage: "checkmark.seal.fill")
+                if !model.syncMessage.isEmpty {
+                    Label(model.syncMessage, systemImage: model.isSyncing ? "arrow.triangle.2.circlepath" : "checkmark.icloud")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Button { showSendConfirmation = true } label: {
+                    Label(model.isSyncing ? "Изпращане..." : "Изпрати и приключи пазаруването", systemImage: "icloud.and.arrow.up.fill")
                         .frame(maxWidth: .infinity).padding(10)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent).tint(IVEXTheme.navy)
+                .disabled(model.isSyncing || model.stores.allSatisfy { $0.usedProducts.isEmpty })
             }
             .padding()
         }
@@ -33,6 +40,21 @@ struct OrderView: View {
         .sheet(isPresented: $showAddProduct) {
             if let store = model.selectedStore { ProductEditor(store: store) }
         }
+        .confirmationDialog("Да изпратя ли поръчката към IVEX Office?", isPresented: $showSendConfirmation) {
+            Button("Изпрати поръчката") {
+                Task {
+                    do { try await model.sendAndCompleteShopping() }
+                    catch { sendError = error.localizedDescription }
+                }
+            }
+            Button("Отказ", role: .cancel) {}
+        } message: {
+            Text("След успешно изпращане поръчката ще се премести в История.")
+        }
+        .alert("Поръчката не е изпратена", isPresented: Binding(
+            get: { !sendError.isEmpty },
+            set: { if !$0 { sendError = "" } }
+        )) { Button("Добре", role: .cancel) {} } message: { Text(sendError) }
     }
 
     private var header: some View {
