@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct OrderView: View {
     @EnvironmentObject private var model: OrderStore
@@ -69,7 +70,14 @@ struct OrderView: View {
 
     private func productCard(_ product: ProductLine, store: StoreOrder) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack { Text(product.name).font(.headline); Spacer(); Text(product.status.rawValue).font(.caption).foregroundStyle(.secondary) }
+            HStack(alignment: .top) {
+                if let data = product.photoData, let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFill().frame(width: 58, height: 58).clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                Text(product.name).font(.headline)
+                Spacer()
+                Text(product.status.rawValue).font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Text("\(product.totalQuantity, specifier: "%.0f") бр.")
                 Spacer(); Text("\(product.totalPrice, specifier: "%.2f") RMB")
@@ -77,6 +85,11 @@ struct OrderView: View {
             }.font(.subheadline).bold()
         }
         .padding().background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .contextMenu {
+            Button("Изтрий продукта", systemImage: "trash", role: .destructive) {
+                model.deleteProduct(product.id, from: store.id)
+            }
+        }
     }
 }
 
@@ -85,16 +98,23 @@ private struct ProductEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State var store: StoreOrder
     @State private var product = ProductLine()
+    @State private var selectedPhoto: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
             Form {
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    Label(product.photoData == nil ? "Добави снимка" : "Смени снимката", systemImage: "camera.fill")
+                }
                 TextField("Продукт", text: $product.name)
                 TextField("Кашони", value: $product.cartons, format: .number).keyboardType(.decimalPad)
                 TextField("Бройки в кашон", value: $product.piecesPerCarton, format: .number).keyboardType(.decimalPad)
                 TextField("Единична цена RMB", value: $product.unitPrice, format: .number).keyboardType(.decimalPad)
                 TextField("Кубици на кашон", value: $product.cbmPerCarton, format: .number).keyboardType(.decimalPad)
                 TextField("Бележка", text: $product.note, axis: .vertical)
+                Picker("Статус", selection: $product.status) {
+                    ForEach(ProductStatus.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
                 Section("Общо") {
                     Text("Количество: \(product.totalQuantity, specifier: "%.0f")")
                     Text("Цена: \(product.totalPrice, specifier: "%.2f") RMB")
@@ -109,6 +129,9 @@ private struct ProductEditor: View {
                         .disabled(product.name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+        }
+        .onChange(of: selectedPhoto) { _, newValue in
+            Task { product.photoData = try? await newValue?.loadTransferable(type: Data.self) }
         }
     }
 }
