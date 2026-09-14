@@ -3,7 +3,7 @@ import Combine
 
 @MainActor
 final class OrderStore: ObservableObject {
-    @Published var clientName = ""
+    @Published var profile = ClientProfile()
     @Published var stores: [StoreOrder] = []
     @Published var selectedStoreID: UUID?
     @Published var history: [StoreOrder] = []
@@ -39,6 +39,17 @@ final class OrderStore: ObservableObject {
         guard let index = stores.firstIndex(where: { $0.id == updated.id }) else { return }
         stores[index] = updated
         selectedStoreID = updated.id
+        save()
+    }
+
+    func saveProfile(_ updated: ClientProfile) {
+        profile = updated
+        save()
+    }
+
+    func deleteProduct(_ productID: UUID, from storeID: UUID) {
+        guard let index = stores.firstIndex(where: { $0.id == storeID }) else { return }
+        stores[index].products.removeAll { $0.id == productID }
         save()
     }
 
@@ -82,14 +93,15 @@ final class OrderStore: ObservableObject {
     }
 
     private struct Snapshot: Codable {
-        var clientName: String
+        var profile: ClientProfile?
+        var clientName: String?
         var stores: [StoreOrder]
         var selectedStoreID: UUID?
         var history: [StoreOrder]
     }
 
     private func save() {
-        let snapshot = Snapshot(clientName: clientName, stores: stores, selectedStoreID: selectedStoreID, history: history)
+        let snapshot = Snapshot(profile: profile, clientName: nil, stores: stores, selectedStoreID: selectedStoreID, history: history)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
@@ -97,10 +109,33 @@ final class OrderStore: ObservableObject {
     private func load() {
         guard let data = try? Data(contentsOf: fileURL),
               let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
-        clientName = snapshot.clientName
+        profile = snapshot.profile ?? ClientProfile(name: snapshot.clientName ?? "")
         stores = snapshot.stores
         selectedStoreID = snapshot.selectedStoreID
         history = snapshot.history
+    }
+
+
+    func csvURL() -> URL? {
+        var rows = ["Клиент,Фирма,Магазин,Поръчка,Продукт,Кашони,Бройки в кашон,Количество,Единична цена RMB,Общо RMB,Кубици,Статус,Бележка"]
+        for store in stores {
+            for product in store.usedProducts {
+                let values = [profile.name, profile.company, store.name, store.orderNumber, product.name,
+                              String(product.cartons), String(product.piecesPerCarton), String(product.totalQuantity),
+                              String(product.unitPrice), String(product.totalPrice), String(product.totalCBM),
+                              product.status.rawValue, product.note]
+                rows.append(values.map(Self.csvEscape).joined(separator: ","))
+            }
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("IVEX07_Order_\(Self.makeOrderNumber()).csv")
+        do {
+            try rows.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch { return nil }
+    }
+
+    private static func csvEscape(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 
     private static func makeOrderNumber() -> String {
