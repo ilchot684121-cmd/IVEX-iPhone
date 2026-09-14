@@ -1,7 +1,18 @@
 import SwiftUI
 
 struct RootView: View {
+    @EnvironmentObject private var model: OrderStore
     var body: some View {
+        Group {
+            if model.profile.isComplete {
+                mainTabs
+            } else {
+                ProfileView(isFirstLaunch: true)
+            }
+        }
+    }
+
+    private var mainTabs: some View {
         TabView {
             NavigationStack { OrderView() }
                 .tabItem { Label("Поръчка", systemImage: "shippingbox") }
@@ -12,7 +23,7 @@ struct RootView: View {
             NavigationStack { ExcelView() }
                 .tabItem { Label("Excel", systemImage: "tablecells") }
             NavigationStack { AboutView() }
-                .tabItem { Label("За IVEX", systemImage: "info.circle") }
+                .tabItem { Label("Профил", systemImage: "person.crop.circle") }
         }
         .tint(IVEXTheme.green)
     }
