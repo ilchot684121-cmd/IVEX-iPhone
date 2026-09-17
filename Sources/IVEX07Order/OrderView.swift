@@ -3,40 +3,39 @@ import PhotosUI
 
 struct OrderView: View {
     @EnvironmentObject private var model: OrderStore
-    @State private var editingStore: StoreOrder?
     @State private var showAddProduct = false
     @State private var showSendConfirmation = false
     @State private var sendError = ""
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
-                header
+            LazyVStack(spacing: 14) {
+                dashboard
                 if let store = model.selectedStore {
-                    metrics(store)
                     storeCard(store)
                     ForEach(store.usedProducts) { product in productCard(product, store: store) }
-                    Button { showAddProduct = true } label: {
-                        Label("Добави продукт", systemImage: "plus.circle.fill")
-                            .frame(maxWidth: .infinity).padding(13)
-                    }
-                    .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
+                    IVEXPrimaryButton(title: "ДОБАВИ ПРОДУКТ", icon: "plus", action: { showAddProduct = true })
                 }
                 if !model.syncMessage.isEmpty {
-                    Label(model.syncMessage, systemImage: model.isSyncing ? "arrow.triangle.2.circlepath" : "checkmark.icloud")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    Label(model.syncMessage, systemImage: model.isSyncing ? "arrow.triangle.2.circlepath" : "checkmark.icloud.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(IVEXTheme.greenDark)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                 }
-                Button { showSendConfirmation = true } label: {
-                    Label(model.isSyncing ? "Изпращане..." : "Изпрати и приключи пазаруването", systemImage: "icloud.and.arrow.up.fill")
-                        .frame(maxWidth: .infinity).padding(10)
-                }
-                .buttonStyle(.borderedProminent).tint(IVEXTheme.navy)
-                .disabled(model.isSyncing || model.stores.allSatisfy { $0.usedProducts.isEmpty })
+                IVEXPrimaryButton(
+                    title: model.isSyncing ? "ИЗПРАЩАНЕ..." : "ИЗПРАТИ И ПРИКЛЮЧИ",
+                    icon: "icloud.and.arrow.up.fill",
+                    color: IVEXTheme.navy,
+                    disabled: model.isSyncing || model.stores.allSatisfy { $0.usedProducts.isEmpty },
+                    action: { showSendConfirmation = true }
+                )
             }
-            .padding()
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 28)
         }
-        .background(IVEXTheme.softGreen)
-        .navigationTitle("IVEX07 ORDER")
+        .background(IVEXTheme.appBackground)
         .sheet(isPresented: $showAddProduct) {
             if let store = model.selectedStore { ProductEditor(store: store) }
         }
@@ -57,61 +56,240 @@ struct OrderView: View {
         )) { Button("Добре", role: .cancel) {} } message: { Text(sendError) }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Нова поръчка").font(.title2).bold().foregroundStyle(.white)
-            Text("Поръчки и доставки от Китай").font(.subheadline).foregroundStyle(.white.opacity(0.75))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(18)
-        .background(LinearGradient(colors: [IVEXTheme.navySoft, IVEXTheme.navy], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 20))
+    private var usedStores: [StoreOrder] {
+        model.stores.filter { !$0.usedProducts.isEmpty }
     }
 
-    private func metrics(_ store: StoreOrder) -> some View {
-        HStack(spacing: 8) {
-            MetricCard(icon: "storefront", title: "МАГАЗИНИ", value: "\(model.stores.count)", color: IVEXTheme.green)
-            MetricCard(icon: "shippingbox", title: "ПРОДУКТИ", value: "\(model.stores.reduce(0) { $0 + $1.usedProducts.count })", color: .blue)
-            MetricCard(icon: "yensign", title: "RMB", value: String(format: "%.0f", model.stores.reduce(0) { $0 + $1.totalPrice }), color: .green)
-            MetricCard(icon: "cube", title: "CBM", value: String(format: "%.2f", model.stores.reduce(0) { $0 + $1.totalCBM }), color: .purple)
+    private var totalProducts: Int {
+        model.stores.reduce(0) { $0 + $1.usedProducts.count }
+    }
+
+    private var totalPrice: Double {
+        model.stores.reduce(0) { $0 + $1.totalPrice }
+    }
+
+    private var totalCBM: Double {
+        model.stores.reduce(0) { $0 + $1.totalCBM }
+    }
+
+    private var sentStores: Int {
+        usedStores.filter(\.sentToSupplier).count
+    }
+
+    private var progress: Double {
+        guard !usedStores.isEmpty else { return 0 }
+        return Double(sentStores) / Double(usedStores.count)
+    }
+
+    private var dashboard: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
+                Text("IVEX")
+                    .foregroundStyle(.white)
+                Text("07")
+                    .foregroundStyle(Color(red: 34 / 255, green: 197 / 255, blue: 94 / 255))
+            }
+            .font(.system(size: 42, weight: .black, design: .rounded))
+            .tracking(1)
+
+            Text("PROFESSIONAL BUYING SYSTEM")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(2.1)
+                .foregroundStyle(Color(red: 215 / 255, green: 227 / 255, blue: 236 / 255))
+                .padding(.top, 2)
+
+            HStack(spacing: 8) {
+                PremiumMetric(icon: "storefront.fill", label: "МАГАЗИНИ", value: "\(usedStores.count)", subtitle: "използвани", accent: IVEXTheme.green)
+                PremiumMetric(icon: "shippingbox.fill", label: "ПРОДУКТИ", value: "\(totalProducts)", subtitle: "общо", accent: IVEXTheme.blue)
+            }
+            .padding(.top, 22)
+
+            HStack(spacing: 8) {
+                PremiumMetric(icon: "yensign", label: "RMB", value: String(format: "%.0f", totalPrice), subtitle: "общо", accent: .green)
+                PremiumMetric(icon: "eurosign", label: "EUR", value: String(format: "%.2f", totalPrice / 8.40), subtitle: "общо", accent: .teal)
+                PremiumMetric(icon: "shippingbox", label: "CBM", value: String(format: "%.2f", totalCBM), subtitle: "общо", accent: IVEXTheme.violet)
+            }
+            .padding(.top, 10)
+
+            Divider()
+                .overlay(.white.opacity(0.16))
+                .padding(.top, 20)
+
+            HStack {
+                Text("ПРОГРЕС")
+                Spacer()
+                Text("\(sentStores) / \(usedStores.count) магазина")
+            }
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.top, 14)
+
+            ProgressView(value: progress)
+                .tint(Color(red: 34 / 255, green: 197 / 255, blue: 94 / 255))
+                .scaleEffect(x: 1, y: 1.8, anchor: .center)
+                .padding(.vertical, 10)
+
+            Text("\(Int(progress * 100))% изпратени")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Color(red: 74 / 255, green: 222 / 255, blue: 128 / 255))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 22)
+        .background(IVEXTheme.navy)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: IVEXTheme.navy.opacity(0.2), radius: 6, y: 3)
+    }
+
+    private func PremiumMetric(icon: String, label: String, value: String, subtitle: String, accent: Color) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(accent)
+                .frame(width: 40, height: 40)
+                .background(accent.opacity(0.16))
+                .clipShape(Circle())
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color(red: 215 / 255, green: 227 / 255, blue: 236 / 255))
+                .lineLimit(1)
+            Text(value)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            Text(subtitle)
+                .font(.system(size: 9))
+                .foregroundStyle(Color(red: 185 / 255, green: 200 / 255, blue: 214 / 255))
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func storeCard(_ store: StoreOrder) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(store.name).font(.headline)
-                Text("Поръчка \(store.orderNumber)").font(.caption).foregroundStyle(.secondary)
+        IVEXCard {
+            VStack(spacing: 13) {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(store.usedProducts.isEmpty ? IVEXTheme.red : IVEXTheme.amber)
+                        .frame(width: 11, height: 11)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(store.name)
+                            .font(.system(size: 20, weight: .heavy))
+                            .foregroundStyle(IVEXTheme.greenDark)
+                        Text("\(store.usedProducts.count) продукта  •  \(String(format: "%.0f", store.usedProducts.reduce(0.0) { $0 + $1.cartons })) кашона")
+                            .font(.caption)
+                            .foregroundStyle(IVEXTheme.slate)
+                    }
+                    Spacer()
+                    Menu {
+                        ForEach(model.stores) { item in
+                            Button(item.name) { model.select(item.id) }
+                        }
+                        Divider()
+                        Button("Добави магазин", systemImage: "plus") { model.addStore() }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "storefront.fill")
+                            Text("\(store.number)").fontWeight(.bold)
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(IVEXTheme.navySoft)
+                        .padding(.horizontal, 15)
+                        .frame(height: 44)
+                        .background(.white)
+                        .clipShape(Capsule())
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Номер на поръчка")
+                        .font(.caption)
+                        .foregroundStyle(IVEXTheme.slate)
+                    Text(store.orderNumber)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(IVEXTheme.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .frame(height: 52)
+                        .background(IVEXTheme.softGreen.opacity(0.55))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(IVEXTheme.border)
+                        }
+                }
             }
-            Spacer()
-            Menu {
-                ForEach(model.stores) { item in Button(item.name) { model.select(item.id) } }
-                Button("Добави магазин") { model.addStore() }
-            } label: { Image(systemName: "chevron.down.circle.fill").font(.title2) }
         }
-        .padding().background(.white, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func productCard(_ product: ProductLine, store: StoreOrder) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .center, spacing: 12) {
                 if let data = product.photoData, let image = UIImage(data: data) {
-                    Image(uiImage: image).resizable().scaledToFill().frame(width: 58, height: 58).clipShape(RoundedRectangle(cornerRadius: 10))
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 76, height: 76)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                } else {
+                    Image(systemName: "photo")
+                        .font(.title2)
+                        .foregroundStyle(IVEXTheme.slate)
+                        .frame(width: 76, height: 76)
+                        .background(IVEXTheme.appBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                Text(product.name).font(.headline)
-                Spacer()
-                Text(product.status.rawValue).font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(product.name)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(IVEXTheme.navy)
+                    Text(product.status.rawValue)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(IVEXTheme.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(IVEXTheme.blue.opacity(0.1))
+                        .clipShape(Capsule())
+                }
             }
-            HStack {
-                Text("\(product.totalQuantity, specifier: "%.0f") бр.")
-                Spacer(); Text("\(product.totalPrice, specifier: "%.2f") RMB")
-                Spacer(); Text("\(product.totalCBM, specifier: "%.3f") m³")
-            }.font(.subheadline).bold()
+
+            HStack(spacing: 7) {
+                ProductMetric(value: String(format: "%.0f", product.totalQuantity), label: "бройки")
+                ProductMetric(value: String(format: "%.2f", product.totalPrice), label: "RMB")
+                ProductMetric(value: String(format: "%.3f", product.totalCBM), label: "CBM")
+            }
         }
-        .padding().background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .padding(15)
+        .background(IVEXTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(IVEXTheme.border)
+        }
+        .shadow(color: IVEXTheme.navy.opacity(0.07), radius: 2, y: 1)
         .contextMenu {
             Button("Изтрий продукта", systemImage: "trash", role: .destructive) {
                 model.deleteProduct(product.id, from: store.id)
             }
         }
+    }
+
+    private func ProductMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(IVEXTheme.navy)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundStyle(IVEXTheme.slate)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(IVEXTheme.appBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 }
 

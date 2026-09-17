@@ -36,6 +36,10 @@
 	<string>IVEX07 Order използва камерата за снимка на продукт или визитка.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>IVEX07 Order използва снимките само към избрания продукт.</string>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -1,71 +1,486 @@
 import SwiftUI
+import UIKit
 
 struct StoresView: View {
     @EnvironmentObject private var model: OrderStore
+    var onOpenStore: () -> Void = {}
+
     var body: some View {
-        List {
-            ForEach(model.stores) { store in
-                Button { model.select(store.id) } label: {
-                    HStack {
-                        Image(systemName: store.sentToSupplier ? "checkmark.circle.fill" : "storefront")
-                            .foregroundStyle(store.sentToSupplier ? .green : .orange)
-                        VStack(alignment: .leading) {
-                            Text(store.name).font(.headline)
-                            Text("\(store.usedProducts.count) продукта • \(store.totalCBM, specifier: "%.3f") m³")
-                                .font(.caption).foregroundStyle(.secondary)
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                storesHeader
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Всички магазини")
+                        .font(.system(size: 19, weight: .heavy))
+                        .foregroundStyle(IVEXTheme.navy)
+                    Spacer()
+                    Text("Натисни карта, за да отвориш")
+                        .font(.caption2)
+                        .foregroundStyle(IVEXTheme.slate)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 3)
+
+                ForEach(model.stores) { store in
+                    Button {
+                        model.select(store.id)
+                        onOpenStore()
+                    } label: {
+                        storeCard(store)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Изтрий магазина", systemImage: "trash", role: .destructive) {
+                            model.deleteStore(store.id)
                         }
                     }
                 }
-            }.onDelete { offsets in offsets.map { model.stores[$0].id }.forEach(model.deleteStore) }
+
+                IVEXPrimaryButton(title: "ДОБАВИ НОВ МАГАЗИН", icon: "storefront.fill.badge.plus") {
+                    model.addStore()
+                    onOpenStore()
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 2)
+            }
+            .padding(.bottom, 28)
         }
-        .navigationTitle("Магазини")
-        .toolbar { Button { model.addStore() } label: { Image(systemName: "plus") } }
+        .background(IVEXTheme.appBackground)
     }
+
+    private var usedStores: [StoreOrder] {
+        model.stores.filter { !$0.usedProducts.isEmpty }
+    }
+
+    private var sentStores: Int {
+        usedStores.filter(\.sentToSupplier).count
+    }
+
+    private var storesHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("МОИТЕ МАГАЗИНИ")
+                        .font(.system(size: 12, weight: .bold))
+                        .tracking(1.1)
+                        .foregroundStyle(.white.opacity(0.72))
+                    Text("Покупна сесия")
+                        .font(.system(size: 26, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+                Spacer()
+                Label("\(usedStores.count)", systemImage: "storefront.fill")
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 13)
+                    .frame(height: 46)
+                    .background(.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            HStack(spacing: 10) {
+                HeaderMetric(label: "ПРОДУКТИ", value: "\(usedStores.reduce(0) { $0 + $1.usedProducts.count })")
+                HeaderMetric(label: "ОБЩО RMB", value: String(format: "%.2f", usedStores.reduce(0) { $0 + $1.totalPrice }))
+                HeaderMetric(label: "ОБЩО CBM", value: String(format: "%.4f", usedStores.reduce(0) { $0 + $1.totalCBM }))
+            }
+            .padding(.top, 20)
+
+            HStack {
+                Text("Изпратени")
+                    .foregroundStyle(.white.opacity(0.72))
+                Spacer()
+                Text("\(sentStores) / \(usedStores.count)")
+                    .fontWeight(.bold)
+                    .foregroundStyle(.white)
+            }
+            .font(.system(size: 12))
+            .padding(.top, 17)
+
+            ProgressView(value: usedStores.isEmpty ? 0 : Double(sentStores) / Double(usedStores.count))
+                .tint(IVEXTheme.green)
+                .scaleEffect(x: 1, y: 1.5, anchor: .center)
+                .padding(.top, 7)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 21)
+        .background(
+            LinearGradient(colors: [IVEXTheme.navySoft, IVEXTheme.navy], startPoint: .top, endPoint: .bottom)
+        )
+    }
+
+    private func HeaderMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+            Text(value)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(11)
+        .background(.white.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+    }
+
+    private func storeCard(_ store: StoreOrder) -> some View {
+        let isEmpty = store.usedProducts.isEmpty
+        let statusColor = store.sentToSupplier ? IVEXTheme.green : (isEmpty ? IVEXTheme.red : IVEXTheme.amber)
+        let status = store.sentToSupplier ? "ИЗПРАТЕН" : (isEmpty ? "ПРАЗЕН" : "В РАБОТА")
+        let cartons = store.usedProducts.reduce(0.0) { $0 + $1.cartons }
+
+        return VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 12) {
+                Image(systemName: "storefront.fill")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 44, height: 44)
+                    .background(statusColor.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.name)
+                        .font(.system(size: 18, weight: .heavy))
+                        .foregroundStyle(IVEXTheme.navy)
+                    HStack(spacing: 6) {
+                        Circle().fill(statusColor).frame(width: 7, height: 7)
+                        Text(status)
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(0.6)
+                            .foregroundStyle(statusColor)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(IVEXTheme.navy.opacity(0.42))
+            }
+
+            if isEmpty {
+                IVEXEmptyCard(text: "Няма добавени продукти")
+            } else {
+                Divider().overlay(IVEXTheme.border)
+                HStack(spacing: 6) {
+                    StoreMetric(value: "\(store.usedProducts.count)", label: "Продукти")
+                    StoreMetric(value: String(format: "%.0f", cartons), label: "Кашони")
+                    StoreMetric(value: String(format: "%.2f", store.totalPrice), label: "RMB")
+                    StoreMetric(value: String(format: "%.4f", store.totalCBM), label: "CBM")
+                }
+            }
+        }
+        .padding(15)
+        .background(IVEXTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(store.sentToSupplier ? IVEXTheme.green.opacity(0.35) : IVEXTheme.border)
+        }
+        .shadow(color: IVEXTheme.navy.opacity(0.09), radius: 3, y: 2)
+        .padding(.horizontal, 14)
+    }
+
+    private func StoreMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(IVEXTheme.navy)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            Text(label)
+                .font(.system(size: 8))
+                .foregroundStyle(IVEXTheme.slate)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct HistoryYearGroup: Identifiable {
+    let year: String
+    let stores: [StoreOrder]
+    var id: String { year }
+}
+
+private struct HistoryPeriodGroup: Identifiable {
+    let key: String
+    let title: String
+    let stores: [StoreOrder]
+    var id: String { key }
 }
 
 struct HistoryView: View {
     @EnvironmentObject private var model: OrderStore
+    @State private var query = ""
+    @State private var expandedYears: Set<String> = []
+    @State private var expandedPeriods: Set<String> = []
+
     var body: some View {
-        Group {
-            if model.history.isEmpty {
-                ContentUnavailableView("Историята е празна", systemImage: "clock", description: Text("Приключените магазини ще се пазят тук."))
-            } else {
-                List(model.history) { store in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(store.name).font(.headline)
-                        Text("Поръчка \(store.orderNumber) • \(store.usedProducts.count) продукта • \(store.totalCBM, specifier: "%.3f") m³").font(.caption)
-                        Button("Поръчай отново") { model.reorder(store) }.buttonStyle(.bordered)
-                    }.padding(.vertical, 4)
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("История")
+                        .font(.system(size: 28, weight: .heavy))
+                        .foregroundStyle(IVEXTheme.text)
+                    Text("Старите магазини, продукти, снимки и визитки остават запазени")
+                        .font(.system(size: 15))
+                        .foregroundStyle(IVEXTheme.slate)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.title2)
+                        .foregroundStyle(IVEXTheme.slate)
+                    TextField("Търси продукт, магазин или поръчка", text: $query)
+                        .textInputAutocapitalization(.never)
+                }
+                .padding(.horizontal, 17)
+                .frame(height: 62)
+                .background(IVEXTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(IVEXTheme.border)
+                }
+
+                Text("Отвори стар магазин и натисни „Поръчай отново“, за да го заредиш в текущата поръчка. После можеш да редактираш, добавяш или изтриваш продукти.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(IVEXTheme.slate)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if filteredHistory.isEmpty {
+                    IVEXEmptyCard(text: query.isEmpty ? "Все още няма запазени магазини" : "Няма намерени резултати")
+                } else {
+                    ForEach(historyByYear) { yearGroup in
+                        let yearOpen = expandedYears.contains(yearGroup.year) || !query.isEmpty
+                        FolderRow(
+                            title: yearGroup.year,
+                            subtitle: "\(yearGroup.stores.count) магазина",
+                            expanded: yearOpen,
+                            level: 0,
+                            purple: false
+                        ) {
+                            toggleYear(yearGroup.year)
+                        }
+
+                        if yearOpen {
+                            ForEach(periods(in: yearGroup.stores)) { period in
+                                let periodOpen = expandedPeriods.contains(period.key) || !query.isEmpty
+                                FolderRow(
+                                    title: "Пазаруване \(period.title)",
+                                    subtitle: "\(period.stores.count) магазина",
+                                    expanded: periodOpen,
+                                    level: 1,
+                                    purple: true
+                                ) {
+                                    togglePeriod(period.key)
+                                }
+
+                                if periodOpen {
+                                    ForEach(period.stores) { store in
+                                        HistoryStoreCard(store: store)
+                                            .padding(.leading, 18)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }.navigationTitle("История")
+            .padding(.horizontal, 14)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+        }
+        .background(IVEXTheme.appBackground)
+        .onAppear {
+            if expandedYears.isEmpty, let first = historyByYear.first?.year {
+                expandedYears.insert(first)
+            }
+        }
+    }
+
+    private var filteredHistory: [StoreOrder] {
+        let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return model.history }
+        return model.history.filter { store in
+            store.name.localizedCaseInsensitiveContains(clean) ||
+            store.orderNumber.localizedCaseInsensitiveContains(clean) ||
+            store.usedProducts.contains { $0.name.localizedCaseInsensitiveContains(clean) }
+        }
+    }
+
+    private var historyByYear: [HistoryYearGroup] {
+        let grouped = Dictionary(grouping: filteredHistory) { store in
+            yearString(store.completedAt ?? .distantPast)
+        }
+        return grouped.map { HistoryYearGroup(year: $0.key, stores: $0.value) }
+            .sorted { $0.year > $1.year }
+    }
+
+    private func periods(in stores: [StoreOrder]) -> [HistoryPeriodGroup] {
+        let grouped = Dictionary(grouping: stores) { store in
+            periodKey(store.completedAt ?? .distantPast)
+        }
+        return grouped.map { key, items in
+            let date = items.compactMap(\.completedAt).max() ?? .distantPast
+            return HistoryPeriodGroup(key: key, title: periodTitle(date), stores: items)
+        }
+        .sorted { $0.key > $1.key }
+    }
+
+    private func toggleYear(_ key: String) {
+        if expandedYears.contains(key) { expandedYears.remove(key) } else { expandedYears.insert(key) }
+    }
+
+    private func togglePeriod(_ key: String) {
+        if expandedPeriods.contains(key) { expandedPeriods.remove(key) } else { expandedPeriods.insert(key) }
+    }
+
+    private func FolderRow(title: String, subtitle: String, expanded: Bool, level: Int, purple: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 11) {
+                Image(systemName: expanded ? "folder.fill.badge.minus" : "folder.fill")
+                    .font(.system(size: level == 0 ? 27 : 23, weight: .semibold))
+                    .foregroundStyle(purple ? IVEXTheme.violet : IVEXTheme.greenDark)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: level == 0 ? 18 : 15, weight: .heavy))
+                        .foregroundStyle(IVEXTheme.navy)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(IVEXTheme.slate)
+                }
+                Spacer()
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(IVEXTheme.slate)
+            }
+            .padding(.horizontal, 15)
+            .frame(minHeight: level == 0 ? 76 : 68)
+            .background(purple ? IVEXTheme.violetSoft : (level == 0 ? Color(red: 231 / 255, green: 248 / 255, blue: 237 / 255) : IVEXTheme.cardBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .shadow(color: IVEXTheme.navy.opacity(0.07), radius: 2, y: 1)
+            .padding(.leading, level == 0 ? 0 : 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func HistoryStoreCard(store: StoreOrder) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(store.name)
+                .font(.headline)
+                .foregroundStyle(IVEXTheme.navy)
+            Text("Поръчка \(store.orderNumber) • \(store.usedProducts.count) продукта • \(String(format: "%.3f", store.totalCBM)) m³")
+                .font(.caption)
+                .foregroundStyle(IVEXTheme.slate)
+            Button {
+                model.reorder(store)
+            } label: {
+                Label("Поръчай отново", systemImage: "arrow.clockwise")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(IVEXTheme.greenDark)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+                    .background(IVEXTheme.softGreen)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(15)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(IVEXTheme.border)
+        }
+    }
+
+    private func yearString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+        return formatter.string(from: date)
+    }
+
+    private func periodKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmm"
+        return formatter.string(from: date)
+    }
+
+    private func periodTitle(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd.MM.yyyy HH:mm"
+        return formatter.string(from: date)
     }
 }
 
 struct ExcelView: View {
     @EnvironmentObject private var model: OrderStore
     @State private var exportURL: URL?
+
     var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "tablecells.fill").font(.system(size: 62)).foregroundStyle(IVEXTheme.green)
-            Text("Excel експорт").font(.title2).bold()
-            Text("Експортирай всички магазини и изпрати файла към IVEX Office.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            if let exportURL {
-                ShareLink(item: exportURL) {
-                    Label("Изпрати файла", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity).padding(12)
-                }.buttonStyle(.borderedProminent).tint(IVEXTheme.green)
-            } else {
-                Button("Създай Excel/CSV файл") { exportURL = model.csvURL() }
-                    .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 17) {
+                Text("Офис и Excel")
+                    .font(.system(size: 28, weight: .heavy))
+                    .foregroundStyle(IVEXTheme.text)
+
+                Text("Изпрати магазините като Excel/CSV файл към търговеца или към IVEX07 Office.")
+                    .font(.system(size: 16))
+                    .foregroundStyle(IVEXTheme.slate)
+
+                IVEXCard {
+                    VStack(alignment: .leading, spacing: 0) {
+                        IVEXSectionTitle(icon: "building.columns.fill", title: "ОБОБЩЕНИЕ")
+                        IVEXReportRow(label: "Запазени магазини", value: "\(model.stores.count)")
+                        IVEXReportRow(label: "Обща стойност", value: String(format: "%.2f RMB", totalPrice))
+                        IVEXReportRow(label: "Общ обем", value: String(format: "%.4f CBM", totalCBM))
+                        IVEXReportRow(label: "Текущ магазин", value: "\(model.selectedStore?.number ?? 1)")
+                    }
+                }
+
+                if let exportURL {
+                    ShareLink(item: exportURL) {
+                        Label("ИЗПРАТИ ФАЙЛА", systemImage: "square.and.arrow.up.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .foregroundStyle(.white)
+                            .background(IVEXTheme.green)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .shadow(color: IVEXTheme.green.opacity(0.18), radius: 3, y: 2)
+                    }
+                } else {
+                    IVEXPrimaryButton(title: "СЪЗДАЙ EXCEL/CSV ФАЙЛ", icon: "doc.badge.plus") {
+                        exportURL = model.csvURL()
+                    }
+                }
+
+                Text("Създава общ файл с магазините и продуктите и отваря менюто за изпращане или архивиране.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(IVEXTheme.slate)
             }
-        }.padding().navigationTitle("Excel")
+            .padding(.horizontal, 18)
+            .padding(.top, 20)
+            .padding(.bottom, 34)
+        }
+        .background(IVEXTheme.appBackground)
+    }
+
+    private var totalPrice: Double {
+        model.stores.reduce(0) { $0 + $1.totalPrice }
+    }
+
+    private var totalCBM: Double {
+        model.stores.reduce(0) { $0 + $1.totalCBM }
     }
 }
 
 struct AboutView: View {
-    @EnvironmentObject private var model: OrderStore
     var body: some View {
         ProfileView(isFirstLaunch: false)
     }
@@ -77,32 +492,101 @@ struct ProfileView: View {
     let isFirstLaunch: Bool
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            if isFirstLaunch {
+                IVEXBrandHeader()
+            }
             ScrollView {
-            VStack(spacing: 18) {
-                Image(systemName: "cart.fill").font(.system(size: 68)).foregroundStyle(IVEXTheme.green)
-                Text("IVEX07 ORDER").font(.largeTitle).bold().foregroundStyle(IVEXTheme.navy)
-                Text("Система за поръчки и доставки от Китай").multilineTextAlignment(.center)
-                GroupBox(isFirstLaunch ? "Регистрация на клиента" : "Моят профил") {
+                VStack(spacing: 18) {
                     VStack(spacing: 12) {
-                        TextField("Име и фамилия", text: $profile.name).textFieldStyle(.roundedBorder)
-                        TextField("Фирма", text: $profile.company).textFieldStyle(.roundedBorder)
-                        TextField("Телефон", text: $profile.phone).textFieldStyle(.roundedBorder).keyboardType(.phonePad)
-                        TextField("Имейл", text: $profile.email).textFieldStyle(.roundedBorder).keyboardType(.emailAddress).textInputAutocapitalization(.never)
-                        Button(isFirstLaunch ? "Започни работа" : "Запази промените") { model.saveProfile(profile) }
-                            .buttonStyle(.borderedProminent).tint(IVEXTheme.green)
-                            .disabled(!profile.isComplete)
-                        if !model.syncMessage.isEmpty {
-                            Text(model.syncMessage).font(.caption).foregroundStyle(.secondary)
+                        Image("IVEXLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 180, height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
+                            .shadow(color: IVEXTheme.navy.opacity(0.12), radius: 5, y: 2)
+                        Text("IVEX07 ORDER")
+                            .font(.system(size: 27, weight: .heavy))
+                            .foregroundStyle(IVEXTheme.navy)
+                        Text("Professional Purchasing System")
+                            .foregroundStyle(IVEXTheme.slate)
+                    }
+
+                    IVEXCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            IVEXSectionTitle(icon: "info.circle.fill", title: "ЗА ПРИЛОЖЕНИЕТО", color: IVEXTheme.blue)
+                            IVEXReportRow(label: "Версия", value: "0.4.0")
+                            IVEXReportRow(label: "Последна актуализация", value: "17.09.2026")
+                            IVEXReportRow(label: "Магазини", value: "Динамични")
+                            IVEXReportRow(label: "Режим", value: "Офлайн база данни + Excel")
                         }
-                    }.padding(.top, 8)
+                    }
+
+                    IVEXCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            IVEXSectionTitle(
+                                icon: "person.fill",
+                                title: isFirstLaunch ? "РЕГИСТРАЦИЯ НА КЛИЕНТА" : "МОЯТ ПРОФИЛ",
+                                color: IVEXTheme.blue
+                            )
+
+                            StyledField(title: "Име и фамилия", text: $profile.name)
+                            StyledField(title: "Фирма", text: $profile.company)
+                            StyledField(title: "Телефон", text: $profile.phone, keyboard: .phonePad)
+                            StyledField(title: "Имейл", text: $profile.email, keyboard: .emailAddress, autocapitalization: .never)
+
+                            IVEXPrimaryButton(
+                                title: isFirstLaunch ? "ЗАПОЧНИ РАБОТА" : "ЗАПАЗИ ПРОМЕНИТЕ",
+                                icon: "checkmark.circle.fill",
+                                color: IVEXTheme.green,
+                                disabled: !profile.isComplete,
+                                action: { model.saveProfile(profile) }
+                            )
+
+                            if !model.syncMessage.isEmpty {
+                                Label(model.syncMessage, systemImage: "icloud.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(IVEXTheme.greenDark)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+
+                    IVEXCard {
+                        VStack(alignment: .leading, spacing: 9) {
+                            IVEXSectionTitle(icon: "checkmark.shield.fill", title: "РАБОТЕЩИ ФУНКЦИИ")
+                            Text("Регистрация и изпращане на поръчките към IVEX Office, магазини, продукти със снимки, RMB, кубици, статуси, история и Excel/CSV експорт.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(IVEXTheme.slate)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
-                GroupBox("iPhone версия 0.3") {
-                    Text("Регистрация и изпращане на поръчките към IVEX Office, магазини, продукти със снимки, RMB, кубици, статуси, история и Excel/CSV експорт.")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }.padding()
-            }.navigationTitle(isFirstLaunch ? "Добре дошли" : "Профил")
-        }.onAppear { profile = model.profile }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 30)
+            }
+        }
+        .background(IVEXTheme.appBackground)
+        .onAppear { profile = model.profile }
+    }
+
+    private func StyledField(
+        title: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType = .default,
+        autocapitalization: TextInputAutocapitalization? = .words
+    ) -> some View {
+        TextField(title, text: text)
+            .keyboardType(keyboard)
+            .textInputAutocapitalization(autocapitalization)
+            .padding(.horizontal, 14)
+            .frame(height: 50)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(IVEXTheme.border)
+            }
     }
 }
