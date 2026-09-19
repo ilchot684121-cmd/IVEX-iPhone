@@ -32,8 +32,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>IVEX07 Order използва камерата за снимка на продукт или визитка.</string>
+	<string>IVEX07 Order използва камерата за сканиране на визитка и снимка на продукт.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>IVEX07 Order използва снимките само към избрания продукт.</string>
 	<key>UIStatusBarStyle</key>

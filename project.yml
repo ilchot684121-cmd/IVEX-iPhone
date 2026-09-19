@@ -19,7 +19,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ivex07.order
         PRODUCT_NAME: IVEX07 Order
-        CURRENT_PROJECT_VERSION: 7
+        CURRENT_PROJECT_VERSION: 8
         MARKETING_VERSION: 0.4.1
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_FILE: Info.plist
