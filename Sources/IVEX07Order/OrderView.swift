@@ -6,6 +6,10 @@ struct OrderView: View {
     @State private var showAddProduct = false
     @State private var showSendConfirmation = false
     @State private var sendError = ""
+    @State private var showBusinessCardScanner = false
+    @State private var storeToRename: StoreOrder?
+    @State private var renameText = ""
+    @State private var showWechatQR = false
 
     var body: some View {
         ScrollView {
@@ -13,8 +17,12 @@ struct OrderView: View {
                 dashboard
                 if let store = model.selectedStore {
                     storeCard(store)
+                    businessCardSection(store)
                     ForEach(store.usedProducts) { product in productCard(product, store: store) }
                     IVEXPrimaryButton(title: "ДОБАВИ ПРОДУКТ", icon: "plus", action: { showAddProduct = true })
+                    IVEXPrimaryButton(title: "МОЯТ WECHAT QR", icon: "qrcode", color: IVEXTheme.green) {
+                        showWechatQR = true
+                    }
                 }
                 if !model.syncMessage.isEmpty {
                     Label(model.syncMessage, systemImage: model.isSyncing ? "arrow.triangle.2.circlepath" : "checkmark.icloud.fill")
@@ -39,6 +47,17 @@ struct OrderView: View {
         .sheet(isPresented: $showAddProduct) {
             if let store = model.selectedStore { ProductEditor(store: store) }
         }
+        .fullScreenCover(isPresented: $showBusinessCardScanner) {
+            BusinessCardScanner { imageData in
+                guard var store = model.selectedStore else { return }
+                store.businessCardData = imageData
+                model.updateStore(store)
+            }
+            .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showWechatQR) {
+            WeChatQRView(data: model.settings.wechatQRData)
+        }
         .confirmationDialog("Да изпратя ли поръчката към IVEX Office?", isPresented: $showSendConfirmation) {
             Button("Изпрати поръчката") {
                 Task {
@@ -54,6 +73,17 @@ struct OrderView: View {
             get: { !sendError.isEmpty },
             set: { if !$0 { sendError = "" } }
         )) { Button("Добре", role: .cancel) {} } message: { Text(sendError) }
+        .alert("Преименувай магазин", isPresented: Binding(
+            get: { storeToRename != nil },
+            set: { if !$0 { storeToRename = nil } }
+        )) {
+            TextField("Име на магазина", text: $renameText)
+            Button("Запази") {
+                if let store = storeToRename { model.renameStore(store.id, to: renameText) }
+                storeToRename = nil
+            }
+            Button("Отказ", role: .cancel) { storeToRename = nil }
+        }
     }
 
     private var usedStores: [StoreOrder] {
@@ -181,6 +211,16 @@ struct OrderView: View {
                             .foregroundStyle(IVEXTheme.slate)
                     }
                     Spacer()
+                    Button {
+                        renameText = store.name
+                        storeToRename = store
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(IVEXTheme.slate)
+                            .frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(.plain)
                     Menu {
                         ForEach(model.stores) { item in
                             Button(item.name) { model.select(item.id) }
@@ -218,6 +258,56 @@ struct OrderView: View {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(IVEXTheme.border)
                         }
+                }
+
+                DepositEditor(store: store)
+            }
+        }
+    }
+
+    private func businessCardSection(_ store: StoreOrder) -> some View {
+        IVEXCard {
+            VStack(spacing: 12) {
+                Button {
+                    showBusinessCardScanner = true
+                } label: {
+                    Label(
+                        store.businessCardData == nil ? "СКАНИРАЙ ВИЗИТКА" : "СКАНИРАЙ ОТНОВО",
+                        systemImage: "doc.viewfinder"
+                    )
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(IVEXTheme.green)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if let data = store.businessCardData, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: 210)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(IVEXTheme.border)
+                        }
+
+                    HStack {
+                        Label("Визитката е запазена", systemImage: "checkmark.circle.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(IVEXTheme.greenDark)
+                        Spacer()
+                        Button("Изтрий", role: .destructive) {
+                            var updated = store
+                            updated.businessCardData = nil
+                            model.updateStore(updated)
+                        }
+                        .font(.footnote.weight(.bold))
+                    }
                 }
             }
         }
@@ -293,18 +383,109 @@ struct OrderView: View {
     }
 }
 
+private struct WeChatQRView: View {
+    @Environment(\.dismiss) private var dismiss
+    let data: Data?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                if let data, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .padding(22)
+                        .background(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .shadow(color: IVEXTheme.navy.opacity(0.15), radius: 8, y: 3)
+                } else {
+                    ContentUnavailableView(
+                        "Няма избран WeChat QR",
+                        systemImage: "qrcode",
+                        description: Text("Добави снимката от За нас → Моят WeChat QR.")
+                    )
+                }
+            }
+            .padding(22)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(IVEXTheme.appBackground)
+            .navigationTitle("Моят WeChat QR")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } } }
+        }
+    }
+}
+
+private struct DepositEditor: View {
+    @EnvironmentObject private var model: OrderStore
+    let store: StoreOrder
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Платено капаро (RMB)", text: $text)
+                .keyboardType(.decimalPad)
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+                .background(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(IVEXTheme.border)
+                }
+                .onChange(of: text) { _, value in
+                    let normalized = value.replacingOccurrences(of: ",", with: ".")
+                    model.updateDeposit(Double(normalized) ?? 0, for: store.id)
+                }
+            Text("Остатък: \(store.remainingRmb, specifier: "%.2f") RMB от общо \(store.totalPrice, specifier: "%.2f") RMB")
+                .font(.caption)
+                .foregroundStyle(IVEXTheme.slate)
+        }
+        .onAppear {
+            text = store.depositRmb > 0 ? String(format: "%.2f", store.depositRmb) : ""
+        }
+        .onChange(of: store.depositRmb) { _, value in
+            let parsed = Double(text.replacingOccurrences(of: ",", with: ".")) ?? 0
+            if abs(parsed - value) > 0.001 {
+                text = value > 0 ? String(format: "%.2f", value) : ""
+            }
+        }
+    }
+}
+
 private struct ProductEditor: View {
     @EnvironmentObject private var model: OrderStore
     @Environment(\.dismiss) private var dismiss
     @State var store: StoreOrder
     @State private var product = ProductLine()
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showCamera = false
 
     var body: some View {
         NavigationStack {
             Form {
-                PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                    Label(product.photoData == nil ? "Добави снимка" : "Смени снимката", systemImage: "camera.fill")
+                HStack(spacing: 12) {
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("СНИМАЙ", systemImage: "camera.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(IVEXTheme.navySoft)
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("ОТ ГАЛЕРИЯТА", systemImage: "photo.on.rectangle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(IVEXTheme.greenDark)
+                }
+                if let data = product.photoData, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 220)
                 }
                 TextField("Продукт", text: $product.name)
                 TextField("Кашони", value: $product.cartons, format: .number).keyboardType(.decimalPad)
@@ -332,6 +513,12 @@ private struct ProductEditor: View {
         }
         .onChange(of: selectedPhoto) { _, newValue in
             Task { product.photoData = try? await newValue?.loadTransferable(type: Data.self) }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraImagePicker { image in
+                product.photoData = image.jpegData(compressionQuality: 0.88)
+            }
+            .ignoresSafeArea()
         }
     }
 }

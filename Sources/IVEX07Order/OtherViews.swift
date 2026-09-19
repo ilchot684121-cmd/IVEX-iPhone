@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct StoresView: View {
     @EnvironmentObject private var model: OrderStore
@@ -370,12 +371,47 @@ struct HistoryView: View {
 
     private func HistoryStoreCard(store: StoreOrder) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(store.name)
-                .font(.headline)
-                .foregroundStyle(IVEXTheme.navy)
+            HStack {
+                Text(store.name)
+                    .font(.headline)
+                    .foregroundStyle(IVEXTheme.navy)
+                Spacer()
+                Text(store.orderStatus.rawValue)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(IVEXTheme.greenDark)
+            }
             Text("Поръчка \(store.orderNumber) • \(store.usedProducts.count) продукта • \(String(format: "%.3f", store.totalCBM)) m³")
                 .font(.caption)
                 .foregroundStyle(IVEXTheme.slate)
+            Text("Общо \(store.totalPrice, specifier: "%.2f") RMB • Капаро \(store.depositRmb, specifier: "%.2f") RMB • Остатък \(store.remainingRmb, specifier: "%.2f") RMB")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(IVEXTheme.slate)
+
+            if let data = store.businessCardData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 150)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            ForEach(store.usedProducts) { product in
+                HStack(spacing: 9) {
+                    if let data = product.photoData, let image = UIImage(data: data) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 42, height: 42)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(product.name).font(.subheadline.weight(.bold))
+                        Text("\(product.totalQuantity, specifier: "%.0f") бр. • \(product.totalPrice, specifier: "%.2f") RMB • \(product.status.rawValue)")
+                            .font(.caption2)
+                            .foregroundStyle(IVEXTheme.slate)
+                    }
+                }
+            }
             Button {
                 model.reorder(store)
             } label: {
@@ -420,7 +456,8 @@ struct HistoryView: View {
 
 struct ExcelView: View {
     @EnvironmentObject private var model: OrderStore
-    @State private var exportURL: URL?
+    @State private var currentStoreURL: URL?
+    @State private var allStoresURL: URL?
 
     var body: some View {
         ScrollView {
@@ -443,9 +480,9 @@ struct ExcelView: View {
                     }
                 }
 
-                if let exportURL {
-                    ShareLink(item: exportURL) {
-                        Label("ИЗПРАТИ ФАЙЛА", systemImage: "square.and.arrow.up.fill")
+                if let currentStoreURL {
+                    ShareLink(item: currentStoreURL) {
+                        Label("ИЗПРАТИ МАГАЗИН \(model.selectedStore?.number ?? 1)", systemImage: "square.and.arrow.up.fill")
                             .font(.system(size: 15, weight: .bold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
@@ -455,8 +492,24 @@ struct ExcelView: View {
                             .shadow(color: IVEXTheme.green.opacity(0.18), radius: 3, y: 2)
                     }
                 } else {
-                    IVEXPrimaryButton(title: "СЪЗДАЙ EXCEL/CSV ФАЙЛ", icon: "doc.badge.plus") {
-                        exportURL = model.csvURL()
+                    IVEXPrimaryButton(title: "СЪЗДАЙ ФАЙЛ ЗА ТЕКУЩИЯ МАГАЗИН", icon: "doc.badge.plus") {
+                        currentStoreURL = model.selectedStore.flatMap { model.csvURL(for: $0) }
+                    }
+                }
+
+                if let allStoresURL {
+                    ShareLink(item: allStoresURL) {
+                        Label("ИЗПРАТИ ВСИЧКИ МАГАЗИНИ ДО ОФИСА", systemImage: "icloud.and.arrow.up.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .foregroundStyle(.white)
+                            .background(IVEXTheme.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                } else {
+                    IVEXPrimaryButton(title: "СЪЗДАЙ ОБЩ ФАЙЛ ЗА ОФИСА", icon: "building.2.crop.circle") {
+                        allStoresURL = model.csvURL()
                     }
                 }
 
@@ -489,6 +542,12 @@ struct AboutView: View {
 struct ProfileView: View {
     @EnvironmentObject private var model: OrderStore
     @State private var profile = ClientProfile()
+    @State private var settings = AppSettings()
+    @State private var selectedWechatQR: PhotosPickerItem?
+    @State private var showClearHistory = false
+    @State private var showFinishShopping = false
+    @State private var showFactoryReset = false
+    @State private var confirmationText = ""
     let isFirstLaunch: Bool
 
     var body: some View {
@@ -515,10 +574,72 @@ struct ProfileView: View {
                     IVEXCard {
                         VStack(alignment: .leading, spacing: 0) {
                             IVEXSectionTitle(icon: "info.circle.fill", title: "ЗА ПРИЛОЖЕНИЕТО", color: IVEXTheme.blue)
-                            IVEXReportRow(label: "Версия", value: "0.4.0")
-                            IVEXReportRow(label: "Последна актуализация", value: "17.09.2026")
+                            IVEXReportRow(label: "Версия", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.4.1")
+                            IVEXReportRow(label: "Последна актуализация", value: "19.09.2026")
                             IVEXReportRow(label: "Магазини", value: "Динамични")
                             IVEXReportRow(label: "Режим", value: "Офлайн база данни + Excel")
+                        }
+                    }
+
+                    IVEXCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            IVEXSectionTitle(icon: "qrcode", title: "МОЯТ WECHAT QR", color: IVEXTheme.green)
+                            Text("Избери снимка на своя WeChat QR. Кодът се пази офлайн и може да се показва на търговците.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(IVEXTheme.slate)
+                            if let data = settings.wechatQRData, let image = UIImage(data: data) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxHeight: 260)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            PhotosPicker(selection: $selectedWechatQR, matching: .images) {
+                                Label(settings.wechatQRData == nil ? "ИЗБЕРИ QR СНИМКА" : "СМЕНИ QR СНИМКАТА", systemImage: "photo.on.rectangle")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 52)
+                                    .background(IVEXTheme.green)
+                                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            }
+                        }
+                    }
+
+                    IVEXCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            IVEXSectionTitle(icon: "calculate", title: "SMART PRICE — RMB КЪМ EUR")
+                            Text("Цената в RMB се умножава по този коефициент за приблизителна крайна цена до България.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(IVEXTheme.slate)
+                            TextField("Коефициент", value: $settings.smartPriceCoefficient, format: .number)
+                                .keyboardType(.decimalPad)
+                                .textFieldStyle(.roundedBorder)
+                            Text("Пример: 10.00 RMB → \(10 * settings.smartPriceCoefficient, specifier: "%.2f") €")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(IVEXTheme.greenDark)
+
+                            Divider()
+
+                            IVEXSectionTitle(icon: "eurosign.arrow.circlepath", title: "ВАЛУТЕН КУРС — EUR", color: IVEXTheme.blue)
+                            TextField("RMB за 1 EUR", value: $settings.eurExchangeRate, format: .number)
+                                .keyboardType(.decimalPad)
+                                .textFieldStyle(.roundedBorder)
+                            IVEXPrimaryButton(title: "ЗАПАЗИ НАСТРОЙКИТЕ", icon: "checkmark.circle.fill") {
+                                model.updateSettings(settings)
+                            }
+                        }
+                    }
+
+                    IVEXCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            IVEXSectionTitle(icon: "gearshape.fill", title: "НАСТРОЙКИ И НУЛИРАНЕ", color: IVEXTheme.red)
+                            Button("ПРИКЛЮЧИ ТЕКУЩОТО ПАЗАРУВАНЕ") { confirmationText = ""; showFinishShopping = true }
+                                .buttonStyle(IVEXWideButtonStyle(color: IVEXTheme.green))
+                            Button("ИЗТРИЙ САМО ИСТОРИЯТА") { showClearHistory = true }
+                                .buttonStyle(IVEXWideButtonStyle(color: IVEXTheme.red))
+                            Button("ФАБРИЧНО НУЛИРАНЕ") { confirmationText = ""; showFactoryReset = true }
+                                .buttonStyle(IVEXWideButtonStyle(color: IVEXTheme.red))
                         }
                     }
 
@@ -568,7 +689,37 @@ struct ProfileView: View {
             }
         }
         .background(IVEXTheme.appBackground)
-        .onAppear { profile = model.profile }
+        .onAppear { profile = model.profile; settings = model.settings }
+        .onChange(of: selectedWechatQR) { _, item in
+            Task {
+                if let data = try? await item?.loadTransferable(type: Data.self) {
+                    settings.wechatQRData = data
+                    model.updateSettings(settings)
+                }
+            }
+        }
+        .confirmationDialog("Изтриване на историята", isPresented: $showClearHistory) {
+            Button("Изтрий историята", role: .destructive) { model.clearHistory() }
+            Button("Отказ", role: .cancel) {}
+        } message: { Text("Текущите магазини няма да бъдат изтрити.") }
+        .alert("Приключване на текущото пазаруване", isPresented: $showFinishShopping) {
+            TextField("Напиши ПОТВЪРЖДАВАМ", text: $confirmationText)
+            Button("Приключи", role: .destructive) {
+                if confirmationText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "ПОТВЪРЖДАВАМ" {
+                    model.completeShopping()
+                }
+            }
+            Button("Отказ", role: .cancel) {}
+        } message: { Text("Напиши ПОТВЪРЖДАВАМ, за да продължиш.") }
+        .alert("Фабрично нулиране", isPresented: $showFactoryReset) {
+            TextField("Напиши ИЗТРИЙ", text: $confirmationText)
+            Button("Изтрий всичко", role: .destructive) {
+                if confirmationText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "ИЗТРИЙ" {
+                    model.factoryReset()
+                }
+            }
+            Button("Отказ", role: .cancel) {}
+        } message: { Text("Това изтрива профила, магазините, снимките, визитките и историята.") }
     }
 
     private func StyledField(
@@ -588,5 +739,18 @@ struct ProfileView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(IVEXTheme.border)
             }
+    }
+}
+
+private struct IVEXWideButtonStyle: ButtonStyle {
+    let color: Color
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(color.opacity(configuration.isPressed ? 0.72 : 1))
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 }

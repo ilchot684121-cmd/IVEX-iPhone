@@ -7,6 +7,7 @@ final class OrderStore: ObservableObject {
     @Published var stores: [StoreOrder] = []
     @Published var selectedStoreID: UUID?
     @Published var history: [StoreOrder] = []
+    @Published var settings = AppSettings()
     @Published var isSyncing = false
     @Published var syncMessage = ""
 
@@ -43,6 +44,24 @@ final class OrderStore: ObservableObject {
         guard let index = stores.firstIndex(where: { $0.id == updated.id }) else { return }
         stores[index] = updated
         selectedStoreID = updated.id
+        save()
+    }
+
+    func renameStore(_ id: UUID, to name: String) {
+        guard let index = stores.firstIndex(where: { $0.id == id }) else { return }
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        stores[index].name = clean.isEmpty ? "Магазин \(stores[index].number)" : clean
+        save()
+    }
+
+    func updateDeposit(_ value: Double, for id: UUID) {
+        guard let index = stores.firstIndex(where: { $0.id == id }) else { return }
+        stores[index].depositRmb = max(0, value)
+        save()
+    }
+
+    func updateSettings(_ updated: AppSettings) {
+        settings = updated
         save()
     }
 
@@ -91,6 +110,22 @@ final class OrderStore: ObservableObject {
         save()
     }
 
+    func clearHistory() {
+        history = []
+        save()
+    }
+
+    func factoryReset() {
+        profile = ClientProfile()
+        stores = []
+        selectedStoreID = nil
+        history = []
+        settings = AppSettings()
+        clientID = UUID().uuidString
+        addStore()
+        save()
+    }
+
     func sendAndCompleteShopping() async throws {
         let orders = stores.filter { !$0.usedProducts.isEmpty }
         guard !orders.isEmpty else { return }
@@ -131,10 +166,11 @@ final class OrderStore: ObservableObject {
         var stores: [StoreOrder]
         var selectedStoreID: UUID?
         var history: [StoreOrder]
+        var settings: AppSettings?
     }
 
     private func save() {
-        let snapshot = Snapshot(profile: profile, clientName: nil, clientID: clientID, stores: stores, selectedStoreID: selectedStoreID, history: history)
+        let snapshot = Snapshot(profile: profile, clientName: nil, clientID: clientID, stores: stores, selectedStoreID: selectedStoreID, history: history, settings: settings)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
@@ -147,12 +183,14 @@ final class OrderStore: ObservableObject {
         stores = snapshot.stores
         selectedStoreID = snapshot.selectedStoreID
         history = snapshot.history
+        settings = snapshot.settings ?? AppSettings()
     }
 
 
-    func csvURL() -> URL? {
+    func csvURL(for selectedStore: StoreOrder? = nil) -> URL? {
         var rows = ["Клиент,Фирма,Магазин,Поръчка,Продукт,Кашони,Бройки в кашон,Количество,Единична цена RMB,Общо RMB,Кубици,Статус,Бележка"]
-        for store in stores {
+        let exportStores = selectedStore.map { [$0] } ?? stores
+        for store in exportStores {
             for product in store.usedProducts {
                 let values = [profile.name, profile.company, store.name, store.orderNumber, product.name,
                               String(product.cartons), String(product.piecesPerCarton), String(product.totalQuantity),
@@ -161,7 +199,8 @@ final class OrderStore: ObservableObject {
                 rows.append(values.map(Self.csvEscape).joined(separator: ","))
             }
         }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("IVEX07_Order_\(Self.makeOrderNumber()).csv")
+        let suffix = selectedStore.map { "Store_\($0.number)" } ?? "All_Stores"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("IVEX07_\(suffix)_\(Self.makeOrderNumber()).csv")
         do {
             try rows.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
             return url
