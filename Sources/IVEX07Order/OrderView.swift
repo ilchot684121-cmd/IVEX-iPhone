@@ -568,7 +568,7 @@ private struct InlineProductCard: View {
                 }
             }
 
-            Text("€ \(product.totalPrice / model.settings.eurExchangeRate, specifier: \"%.2f\")")
+            Text("€ \(product.totalPrice / model.settings.eurExchangeRate, specifier: "%.2f")")
                 .font(.system(size: 20, weight: .heavy))
                 .foregroundStyle(IVEXTheme.greenDark)
                 .frame(maxWidth: .infinity, alignment: .leading)
