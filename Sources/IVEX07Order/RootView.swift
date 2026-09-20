@@ -40,7 +40,7 @@ struct RootView: View {
             IVEXBrandHeader()
             Group {
                 switch selectedTab {
-                case .order: OrderView()
+                case .order: OrderView(onOpenStores: { selectedTab = .stores })
                 case .stores: StoresView(onOpenStore: { selectedTab = .order })
                 case .history: HistoryView()
                 case .files: ExcelView()

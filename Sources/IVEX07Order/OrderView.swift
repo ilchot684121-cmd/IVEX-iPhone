@@ -3,13 +3,14 @@ import PhotosUI
 
 struct OrderView: View {
     @EnvironmentObject private var model: OrderStore
-    @State private var showAddProduct = false
+    var onOpenStores: () -> Void = {}
     @State private var showSendConfirmation = false
     @State private var sendError = ""
     @State private var showBusinessCardScanner = false
     @State private var storeToRename: StoreOrder?
     @State private var renameText = ""
     @State private var showWechatQR = false
+    @State private var showDeleteStoreConfirmation = false
 
     var body: some View {
         ScrollView {
@@ -18,11 +19,33 @@ struct OrderView: View {
                 if let store = model.selectedStore {
                     storeCard(store)
                     businessCardSection(store)
-                    ForEach(store.usedProducts) { product in productCard(product, store: store) }
-                    IVEXPrimaryButton(title: "ДОБАВИ ПРОДУКТ", icon: "plus", action: { showAddProduct = true })
+                    ForEach(Array(store.products.enumerated()), id: \.element.id) { index, product in
+                        InlineProductCard(number: index + 1, product: product, storeID: store.id)
+                    }
+                    IVEXPrimaryButton(title: "ДОБАВИ ПРОДУКТ", icon: "plus", action: { model.addProduct(to: store.id) })
+                    IVEXPrimaryButton(title: "МОИТЕ МАГАЗИНИ", icon: "storefront.fill", color: IVEXTheme.blue, action: onOpenStores)
                     IVEXPrimaryButton(title: "МОЯТ WECHAT QR", icon: "qrcode", color: IVEXTheme.green) {
                         showWechatQR = true
                     }
+                    Button { model.saveNow() } label: {
+                        Label("Запази сега", systemImage: "checkmark.icloud.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(IVEXTheme.slate)
+                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .overlay(Capsule().stroke(IVEXTheme.border, lineWidth: 1.2))
+                    }
+                    .buttonStyle(.plain)
+                    Button { showDeleteStoreConfirmation = true } label: {
+                        Label("Изтрий \(store.name)", systemImage: "trash.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(IVEXTheme.red)
+                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .overlay(Capsule().stroke(IVEXTheme.border, lineWidth: 1.2))
+                    }
+                    .buttonStyle(.plain)
+                    Label("Автоматично запазване", systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(IVEXTheme.green)
                 }
                 if !model.syncMessage.isEmpty {
                     Label(model.syncMessage, systemImage: model.isSyncing ? "arrow.triangle.2.circlepath" : "checkmark.icloud.fill")
@@ -44,9 +67,6 @@ struct OrderView: View {
             .padding(.bottom, 28)
         }
         .background(IVEXTheme.appBackground)
-        .sheet(isPresented: $showAddProduct) {
-            if let store = model.selectedStore { ProductEditor(store: store) }
-        }
         .fullScreenCover(isPresented: $showBusinessCardScanner) {
             BusinessCardScanner { imageData in
                 guard var store = model.selectedStore else { return }
@@ -68,6 +88,12 @@ struct OrderView: View {
             Button("Отказ", role: .cancel) {}
         } message: {
             Text("След успешно изпращане поръчката ще се премести в История.")
+        }
+        .confirmationDialog("Да изтрия ли текущия магазин?", isPresented: $showDeleteStoreConfirmation) {
+            if let store = model.selectedStore {
+                Button("Изтрий \(store.name)", role: .destructive) { model.deleteStore(store.id) }
+            }
+            Button("Отказ", role: .cancel) {}
         }
         .alert("Поръчката не е изпратена", isPresented: Binding(
             get: { !sendError.isEmpty },
@@ -450,6 +476,158 @@ private struct DepositEditor: View {
                 text = value > 0 ? String(format: "%.2f", value) : ""
             }
         }
+    }
+}
+
+private struct InlineProductCard: View {
+    @EnvironmentObject private var model: OrderStore
+    let number: Int
+    let storeID: UUID
+    @State private var product: ProductLine
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showCamera = false
+
+    init(number: Int, product: ProductLine, storeID: UUID) {
+        self.number = number
+        self.storeID = storeID
+        _product = State(initialValue: product)
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                Text("\(number)")
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(IVEXTheme.navy)
+                    .clipShape(Circle())
+                Text("Продукт \(number)")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(IVEXTheme.text)
+                Spacer()
+                Button(role: .destructive) {
+                    model.deleteProduct(product.id, from: storeID)
+                } label: {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(IVEXTheme.red)
+                        .frame(width: 42, height: 42)
+                }
+                .buttonStyle(.plain)
+            }
+
+            AndroidField(placeholder: "Име / 品名", text: $product.name)
+
+            HStack(spacing: 10) {
+                AndroidNumberField(title: "Кашони", value: $product.cartons)
+                AndroidNumberField(title: "Бр./кашон", value: $product.piecesPerCarton)
+            }
+            HStack(spacing: 10) {
+                AndroidNumberField(title: "Цена RMB", value: $product.unitPrice)
+                AndroidNumberField(title: "CBM/кашон", value: $product.cbmPerCarton)
+            }
+
+            AndroidField(placeholder: "Бележка / 备注", text: $product.note)
+
+            HStack(spacing: 12) {
+                Group {
+                    if let data = product.photoData, let image = UIImage(data: data) {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Image(systemName: "photo.fill")
+                            .font(.system(size: 25))
+                            .foregroundStyle(IVEXTheme.slate)
+                    }
+                }
+                .frame(width: 105, height: 112)
+                .background(IVEXTheme.appBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipped()
+
+                VStack(spacing: 10) {
+                    Button { showCamera = true } label: {
+                        Label("СНИМАЙ", systemImage: "camera.fill")
+                            .font(.system(size: 15, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).frame(height: 48)
+                            .background(IVEXTheme.navySoft)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("ОТ ГАЛЕРИЯТА", systemImage: "photo.on.rectangle.angled")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(IVEXTheme.greenDark)
+                            .frame(maxWidth: .infinity).frame(height: 46)
+                            .background(.white)
+                            .overlay(Capsule().stroke(IVEXTheme.border, lineWidth: 1.5))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            Text("€ \(product.totalPrice / model.settings.eurExchangeRate, specifier: \"%.2f\")")
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(IVEXTheme.greenDark)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+                .background(IVEXTheme.softGreen)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(17)
+        .background(IVEXTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(IVEXTheme.border, lineWidth: 1.2))
+        .shadow(color: IVEXTheme.navy.opacity(0.1), radius: 3, y: 2)
+        .onChange(of: product) { _, value in model.updateProduct(value, in: storeID) }
+        .onChange(of: selectedPhoto) { _, newValue in
+            Task {
+                if let data = try? await newValue?.loadTransferable(type: Data.self) {
+                    product.photoData = data
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraImagePicker { image in product.photoData = image.jpegData(compressionQuality: 0.88) }
+                .ignoresSafeArea()
+        }
+    }
+}
+
+private struct AndroidField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        TextField(placeholder, text: $text, axis: .vertical)
+            .font(.system(size: 17))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 60)
+            .background(.white)
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(IVEXTheme.border, lineWidth: 1.2))
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+    }
+}
+
+private struct AndroidNumberField: View {
+    let title: String
+    @Binding var value: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption).foregroundStyle(IVEXTheme.slate)
+            TextField(title, value: $value, format: .number)
+                .keyboardType(.decimalPad)
+                .font(.system(size: 17))
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity).frame(height: 66)
+        .background(.white)
+        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(IVEXTheme.border, lineWidth: 1.2))
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 }
 

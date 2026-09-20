@@ -90,6 +90,23 @@ final class OrderStore: ObservableObject {
         save()
     }
 
+    func addProduct(to storeID: UUID) {
+        guard let index = stores.firstIndex(where: { $0.id == storeID }) else { return }
+        stores[index].products.append(ProductLine())
+        save()
+    }
+
+    func updateProduct(_ product: ProductLine, in storeID: UUID) {
+        guard let storeIndex = stores.firstIndex(where: { $0.id == storeID }),
+              let productIndex = stores[storeIndex].products.firstIndex(where: { $0.id == product.id }) else { return }
+        stores[storeIndex].products[productIndex] = product
+        save()
+    }
+
+    func saveNow() {
+        save()
+    }
+
     func deleteStore(_ id: UUID) {
         stores.removeAll { $0.id == id }
         selectedStoreID = stores.first?.id
