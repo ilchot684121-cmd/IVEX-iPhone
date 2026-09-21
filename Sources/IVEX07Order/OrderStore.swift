@@ -204,28 +204,10 @@ final class OrderStore: ObservableObject {
     }
 
 
-    func csvURL(for selectedStore: StoreOrder? = nil) -> URL? {
-        var rows = ["Клиент,Фирма,Магазин,Поръчка,Продукт,Кашони,Бройки в кашон,Количество,Единична цена RMB,Общо RMB,Кубици,Статус,Бележка"]
+    func xlsxURL(for selectedStore: StoreOrder? = nil) -> URL? {
         let exportStores = selectedStore.map { [$0] } ?? stores
-        for store in exportStores {
-            for product in store.usedProducts {
-                let values = [profile.name, profile.company, store.name, store.orderNumber, product.name,
-                              String(product.cartons), String(product.piecesPerCarton), String(product.totalQuantity),
-                              String(product.unitPrice), String(product.totalPrice), String(product.totalCBM),
-                              product.status.rawValue, product.note]
-                rows.append(values.map(Self.csvEscape).joined(separator: ","))
-            }
-        }
         let suffix = selectedStore.map { "Store_\($0.number)" } ?? "All_Stores"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("IVEX07_\(suffix)_\(Self.makeOrderNumber()).csv")
-        do {
-            try rows.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
-            return url
-        } catch { return nil }
-    }
-
-    private static func csvEscape(_ value: String) -> String {
-        "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        return XLSXExporter.makeFile(stores: exportStores, profile: profile, settings: settings, suffix: suffix)
     }
 
     private static func makeOrderNumber() -> String {

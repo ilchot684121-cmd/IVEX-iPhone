@@ -466,7 +466,7 @@ struct ExcelView: View {
                     .font(.system(size: 28, weight: .heavy))
                     .foregroundStyle(IVEXTheme.text)
 
-                Text("Изпрати магазините като Excel/CSV файл към търговеца или към IVEX07 Office.")
+                Text("Изпрати истински Excel файл със снимките на продуктите и визитката към търговеца или IVEX07 Office.")
                     .font(.system(size: 16))
                     .foregroundStyle(IVEXTheme.slate)
 
@@ -493,7 +493,7 @@ struct ExcelView: View {
                     }
                 } else {
                     IVEXPrimaryButton(title: "СЪЗДАЙ ФАЙЛ ЗА ТЕКУЩИЯ МАГАЗИН", icon: "doc.badge.plus") {
-                        currentStoreURL = model.selectedStore.flatMap { model.csvURL(for: $0) }
+                        currentStoreURL = model.selectedStore.flatMap { model.xlsxURL(for: $0) }
                     }
                 }
 
@@ -509,11 +509,11 @@ struct ExcelView: View {
                     }
                 } else {
                     IVEXPrimaryButton(title: "СЪЗДАЙ ОБЩ ФАЙЛ ЗА ОФИСА", icon: "building.2.crop.circle") {
-                        allStoresURL = model.csvURL()
+                        allStoresURL = model.xlsxURL()
                     }
                 }
 
-                Text("Създава общ файл с магазините и продуктите и отваря менюто за изпращане или архивиране.")
+                Text("Един магазин изпраща само избрания магазин. Общият файл включва всички магазини, продуктови снимки, визитки и обобщение.")
                     .font(.system(size: 13))
                     .foregroundStyle(IVEXTheme.slate)
             }
