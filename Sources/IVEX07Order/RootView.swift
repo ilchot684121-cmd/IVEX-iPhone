@@ -58,7 +58,7 @@ struct RootView: View {
                     } label: {
                         VStack(spacing: 4) {
                             Image(systemName: tab.icon)
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(.system(size: 23, weight: .semibold))
                             Text(tab.rawValue)
                                 .font(.system(size: 10, weight: selectedTab == tab ? .bold : .medium))
                                 .lineLimit(1)
@@ -66,7 +66,7 @@ struct RootView: View {
                         }
                         .foregroundStyle(selectedTab == tab ? IVEXTheme.greenDark : IVEXTheme.slate)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 65)
+                        .frame(height: 70)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

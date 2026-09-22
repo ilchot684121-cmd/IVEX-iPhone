@@ -21,7 +21,7 @@ enum IVEXTheme {
 struct IVEXBrandHeader: View {
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "shippingbox.fill")
+            Image(systemName: "archivebox.fill")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(IVEXTheme.green)
             HStack(spacing: 0) {
@@ -34,7 +34,7 @@ struct IVEXBrandHeader: View {
             .tracking(0.5)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 92)
+        .frame(height: 84)
         .background(IVEXTheme.navy.ignoresSafeArea(edges: .top))
     }
 }
@@ -87,9 +87,9 @@ struct IVEXPrimaryButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: icon)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 16, weight: .heavy))
                 .frame(maxWidth: .infinity)
-                .frame(height: 54)
+                .frame(height: 60)
                 .foregroundStyle(.white)
                 .background(disabled ? IVEXTheme.slate.opacity(0.55) : color)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))

@@ -31,7 +31,7 @@ struct OrderView: View {
                         Label("Запази сега", systemImage: "checkmark.icloud.fill")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(IVEXTheme.slate)
-                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .frame(maxWidth: .infinity).frame(height: 58)
                             .overlay(Capsule().stroke(IVEXTheme.border, lineWidth: 1.2))
                     }
                     .buttonStyle(.plain)
@@ -39,7 +39,7 @@ struct OrderView: View {
                         Label("Изтрий \(store.name)", systemImage: "trash.fill")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(IVEXTheme.red)
-                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .frame(maxWidth: .infinity).frame(height: 58)
                             .overlay(Capsule().stroke(IVEXTheme.border, lineWidth: 1.2))
                     }
                     .buttonStyle(.plain)
@@ -232,7 +232,7 @@ struct OrderView: View {
                         Text(store.name)
                             .font(.system(size: 20, weight: .heavy))
                             .foregroundStyle(IVEXTheme.greenDark)
-                        Text("\(store.usedProducts.count) продукта  •  \(String(format: "%.0f", store.usedProducts.reduce(0.0) { $0 + $1.cartons })) кашона")
+                        Text("\(store.usedProducts.count) продукта  •  \(String(format: "%.0f", store.products.reduce(0.0) { $0 + $1.cartons })) кашона")
                             .font(.caption)
                             .foregroundStyle(IVEXTheme.slate)
                     }
@@ -449,11 +449,17 @@ private struct DepositEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField("Платено капаро (RMB)", text: $text)
-                .keyboardType(.decimalPad)
+            HStack(spacing: 12) {
+                Image(systemName: "banknote.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(IVEXTheme.greenDark)
+                TextField("Платено капаро (RMB)", text: $text)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 17))
+            }
                 .padding(.horizontal, 14)
-                .frame(height: 50)
-                .background(.white)
+                .frame(height: 58)
+                .background(.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
