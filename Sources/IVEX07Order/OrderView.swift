@@ -161,9 +161,9 @@ struct OrderView: View {
             .padding(.top, 22)
 
             HStack(spacing: 8) {
-                PremiumMetric(icon: "yensign", label: "RMB", value: String(format: "%.0f", totalPrice), subtitle: "общо", accent: .green)
-                PremiumMetric(icon: "eurosign", label: "EUR", value: String(format: "%.2f", totalPrice / 8.40), subtitle: "общо", accent: .teal)
-                PremiumMetric(icon: "shippingbox", label: "CBM", value: String(format: "%.2f", totalCBM), subtitle: "общо", accent: IVEXTheme.violet)
+                PremiumMetric(icon: "yensign", label: "RMB", value: String(format: "%.2f", totalPrice), subtitle: "всички магазини", accent: .green)
+                PremiumMetric(icon: "shippingbox", label: "CBM", value: String(format: "%.3f", totalCBM), subtitle: "всички магазини", accent: IVEXTheme.violet)
+                PremiumMetric(icon: "eurosign", label: "EUR", value: String(format: "%.2f", totalPrice / max(model.settings.eurExchangeRate, 0.0001)), subtitle: "всички магазини", accent: .teal)
             }
             .padding(.top, 10)
 
@@ -574,7 +574,7 @@ private struct InlineProductCard: View {
                 }
             }
 
-            Text("€ \(product.totalPrice / model.settings.eurExchangeRate, specifier: "%.2f")")
+            Text("€ \(product.unitPrice * model.settings.smartPriceCoefficient, specifier: "%.2f")")
                 .font(.system(size: 20, weight: .heavy))
                 .foregroundStyle(IVEXTheme.greenDark)
                 .frame(maxWidth: .infinity, alignment: .leading)
