@@ -3,6 +3,10 @@ import Combine
 
 @MainActor
 final class OrderStore: ObservableObject {
+    enum CloudConnectionState: Equatable {
+        case checking, connected, disconnected
+    }
+
     @Published var profile = ClientProfile()
     @Published var stores: [StoreOrder] = []
     @Published var selectedStoreID: UUID?
@@ -10,6 +14,8 @@ final class OrderStore: ObservableObject {
     @Published var settings = AppSettings()
     @Published var isSyncing = false
     @Published var syncMessage = ""
+    @Published var cloudConnectionState: CloudConnectionState = .checking
+    @Published var lastCloudContact: Date?
 
     private let fileURL: URL
     private var clientID = UUID().uuidString
@@ -74,14 +80,29 @@ final class OrderStore: ObservableObject {
     func registerProfile() async {
         guard profile.isComplete else { return }
         isSyncing = true
+        cloudConnectionState = .checking
         syncMessage = "Регистрацията се изпраща..."
         do {
             try await syncService.register(profile: profile, clientID: clientID)
-            syncMessage = "Регистрацията е получена в офиса"
+            markCloudConnected("Свързан с IVEX Office")
         } catch {
-            syncMessage = "Няма връзка. Данните са запазени в телефона."
+            markCloudDisconnected()
         }
         isSyncing = false
+    }
+
+    func checkCloudConnection() async {
+        guard profile.isComplete, !isSyncing else { return }
+        isSyncing = true
+        cloudConnectionState = .checking
+        syncMessage = "Проверка на връзката..."
+        defer { isSyncing = false }
+        do {
+            try await syncService.register(profile: profile, clientID: clientID)
+            markCloudConnected("Свързан с IVEX Office")
+        } catch {
+            markCloudDisconnected()
+        }
     }
 
     func deleteProduct(_ productID: UUID, from storeID: UUID) {
@@ -147,14 +168,31 @@ final class OrderStore: ObservableObject {
         let orders = stores.filter { !$0.usedProducts.isEmpty }
         guard !orders.isEmpty else { return }
         isSyncing = true
+        cloudConnectionState = .checking
         syncMessage = "Изпращане към IVEX Office..."
         defer { isSyncing = false }
-        try await syncService.register(profile: profile, clientID: clientID)
-        for order in orders {
-            try await syncService.send(order: order, profile: profile, clientID: clientID)
+        do {
+            try await syncService.register(profile: profile, clientID: clientID)
+            for order in orders {
+                try await syncService.send(order: order, profile: profile, clientID: clientID)
+            }
+            markCloudConnected("Поръчката е получена в офиса")
+            completeShopping()
+        } catch {
+            markCloudDisconnected()
+            throw error
         }
-        syncMessage = "Поръчката е получена в офиса"
-        completeShopping()
+    }
+
+    private func markCloudConnected(_ message: String) {
+        cloudConnectionState = .connected
+        lastCloudContact = Date()
+        syncMessage = message
+    }
+
+    private func markCloudDisconnected() {
+        cloudConnectionState = .disconnected
+        syncMessage = "Няма връзка. Данните са запазени в телефона."
     }
 
     func reorder(_ archived: StoreOrder) {

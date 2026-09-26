@@ -458,6 +458,7 @@ struct ExcelView: View {
     @EnvironmentObject private var model: OrderStore
     @State private var currentStoreURL: URL?
     @State private var allStoresURL: URL?
+    @State private var sendError = ""
 
     var body: some View {
         ScrollView {
@@ -469,6 +470,8 @@ struct ExcelView: View {
                 Text("Изпрати истински Excel файл със снимките на продуктите и визитката към търговеца или IVEX07 Office.")
                     .font(.system(size: 16))
                     .foregroundStyle(IVEXTheme.slate)
+
+                CloudConnectionCard()
 
                 IVEXCard {
                     VStack(alignment: .leading, spacing: 0) {
@@ -499,7 +502,7 @@ struct ExcelView: View {
 
                 if let allStoresURL {
                     ShareLink(item: allStoresURL) {
-                        Label("ИЗПРАТИ ВСИЧКИ МАГАЗИНИ ДО ОФИСА", systemImage: "icloud.and.arrow.up.fill")
+                        Label("СПОДЕЛИ ОБЩИЯ EXCEL ФАЙЛ", systemImage: "square.and.arrow.up.fill")
                             .font(.system(size: 15, weight: .bold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
@@ -513,6 +516,18 @@ struct ExcelView: View {
                     }
                 }
 
+                IVEXPrimaryButton(
+                    title: model.isSyncing ? "ИЗПРАЩАНЕ..." : "ИЗПРАТИ ПОРЪЧКИТЕ КЪМ ОФИСА",
+                    icon: "icloud.and.arrow.up.fill",
+                    color: IVEXTheme.blue,
+                    disabled: model.isSyncing || model.stores.allSatisfy { $0.usedProducts.isEmpty }
+                ) {
+                    Task {
+                        do { try await model.sendAndCompleteShopping() }
+                        catch { sendError = error.localizedDescription }
+                    }
+                }
+
                 Text("Един магазин изпраща само избрания магазин. Общият файл включва всички магазини, продуктови снимки, визитки и обобщение.")
                     .font(.system(size: 13))
                     .foregroundStyle(IVEXTheme.slate)
@@ -522,6 +537,11 @@ struct ExcelView: View {
             .padding(.bottom, 34)
         }
         .background(IVEXTheme.appBackground)
+        .task { await model.checkCloudConnection() }
+        .alert("Поръчката не е изпратена", isPresented: Binding(
+            get: { !sendError.isEmpty },
+            set: { if !$0 { sendError = "" } }
+        )) { Button("Добре", role: .cancel) {} } message: { Text(sendError) }
     }
 
     private var totalPrice: Double {
@@ -530,6 +550,50 @@ struct ExcelView: View {
 
     private var totalCBM: Double {
         model.stores.reduce(0) { $0 + $1.totalCBM }
+    }
+}
+
+private struct CloudConnectionCard: View {
+    @EnvironmentObject private var model: OrderStore
+
+    private var color: Color {
+        switch model.cloudConnectionState {
+        case .checking: return .orange
+        case .connected: return IVEXTheme.green
+        case .disconnected: return IVEXTheme.red
+        }
+    }
+
+    private var title: String {
+        switch model.cloudConnectionState {
+        case .checking: return "ПРОВЕРКА НА ВРЪЗКАТА"
+        case .connected: return "СВЪРЗАН С IVEX OFFICE"
+        case .disconnected: return "НЯМА ВРЪЗКА С ОФИСА"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: model.cloudConnectionState == .connected ? "checkmark.icloud.fill" : "icloud.slash.fill")
+                .font(.title2)
+                .foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.caption.weight(.heavy)).foregroundStyle(color)
+                Text(model.syncMessage).font(.caption).foregroundStyle(IVEXTheme.slate)
+                if let date = model.lastCloudContact {
+                    Text("Последен успешен контакт: \(date.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption2).foregroundStyle(IVEXTheme.slate)
+                }
+            }
+            Spacer()
+            Button { Task { await model.checkCloudConnection() } } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .disabled(model.isSyncing)
+        }
+        .padding(15)
+        .background(color.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -664,12 +728,7 @@ struct ProfileView: View {
                                 action: { model.saveProfile(profile) }
                             )
 
-                            if !model.syncMessage.isEmpty {
-                                Label(model.syncMessage, systemImage: "icloud.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(IVEXTheme.greenDark)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                            CloudConnectionCard()
                         }
                     }
 
@@ -689,7 +748,11 @@ struct ProfileView: View {
             }
         }
         .background(IVEXTheme.appBackground)
-        .onAppear { profile = model.profile; settings = model.settings }
+        .onAppear {
+            profile = model.profile
+            settings = model.settings
+            Task { await model.checkCloudConnection() }
+        }
         .onChange(of: selectedWechatQR) { _, item in
             Task {
                 if let data = try? await item?.loadTransferable(type: Data.self) {
