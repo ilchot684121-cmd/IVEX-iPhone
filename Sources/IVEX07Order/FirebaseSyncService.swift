@@ -7,8 +7,8 @@ enum IVEXSyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return "Няма валиден отговор от облака."
-        case let .server(code, message): return "Облакът върна грешка (code): (message)"
-        case let .authentication(message): return "Неуспешна връзка с облака: (message)"
+        case let .server(code, message): return "Облакът върна грешка \(code): \(message)"
+        case let .authentication\(message): return "Неуспешна връзка с облака: \(message)"
         }
     }
 }
@@ -66,7 +66,7 @@ final class FirebaseSyncService {
             "updatedAt": timestampValue(now)
         ]
         let safe = order.orderNumber.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
-        try await write(collection: "orders", documentID: "(clientID)_(safe)", fields: fields, idToken: auth.idToken)
+        try await write(collection: "orders", documentID: "\(clientID)_\(safe)", fields: fields, idToken: auth.idToken)
     }
 
     private func validAuthToken() async throws -> AuthToken {
@@ -85,7 +85,7 @@ final class FirebaseSyncService {
     }
 
     private func signInAnonymously() async throws -> AuthToken {
-        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=(apiKey)") else { throw IVEXSyncError.invalidResponse }
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=\(apiKey)") else { throw IVEXSyncError.invalidResponse }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -99,13 +99,13 @@ final class FirebaseSyncService {
     }
 
     private func refresh(_ old: AuthToken) async throws -> AuthToken {
-        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=(apiKey)") else { throw IVEXSyncError.invalidResponse }
+        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else { throw IVEXSyncError.invalidResponse }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 25
         let encoded = old.refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? old.refreshToken
-        request.httpBody = "grant_type=refresh_token&refresh_token=(encoded)".data(using: .utf8)
+        request.httpBody = "grant_type=refresh_token&refresh_token=\(encoded)".data(using: .utf8)
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data, authentication: true)
         let result = try JSONDecoder().decode(RefreshResponse.self, from: data)
@@ -115,12 +115,12 @@ final class FirebaseSyncService {
 
     private func write(collection: String, documentID: String, fields: [String: Any], idToken: String) async throws {
         let encodedID = documentID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? documentID
-        let path = "https://firestore.googleapis.com/v1/projects/(projectID)/databases/(databaseID)/documents/(collection)/(encodedID)"
+        let path = "https://firestore.googleapis.com/v1/projects/\(projectID)/databases/\(databaseID)/documents/\(collection)/\(encodedID)"
         guard let url = URL(string: path) else { throw IVEXSyncError.invalidResponse }
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer (idToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 25
         request.httpBody = try JSONSerialization.data(withJSONObject: ["fields": fields])
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -131,7 +131,7 @@ final class FirebaseSyncService {
         guard let http = response as? HTTPURLResponse else { throw IVEXSyncError.invalidResponse }
         guard (200...299).contains(http.statusCode) else {
             let message = Self.serverMessage(from: data)
-            if authentication { throw IVEXSyncError.authentication(message) }
+            if authentication { throw IVEXSyncError.authentication\(message) }
             throw IVEXSyncError.server(http.statusCode, message)
         }
     }
