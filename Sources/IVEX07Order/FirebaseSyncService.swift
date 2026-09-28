@@ -8,7 +8,7 @@ enum IVEXSyncError: LocalizedError {
         switch self {
         case .invalidResponse: return "Няма валиден отговор от облака."
         case let .server(code, message): return "Облакът върна грешка \(code): \(message)"
-        case let .authentication\(message): return "Неуспешна връзка с облака: \(message)"
+        case let .authentication(message): return "Неуспешна връзка с облака: \(message)"
         }
     }
 }
@@ -131,7 +131,7 @@ final class FirebaseSyncService {
         guard let http = response as? HTTPURLResponse else { throw IVEXSyncError.invalidResponse }
         guard (200...299).contains(http.statusCode) else {
             let message = Self.serverMessage(from: data)
-            if authentication { throw IVEXSyncError.authentication\(message) }
+            if authentication { throw IVEXSyncError.authentication(message) }
             throw IVEXSyncError.server(http.statusCode, message)
         }
     }
