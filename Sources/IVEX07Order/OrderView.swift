@@ -4,8 +4,6 @@ import PhotosUI
 struct OrderView: View {
     @EnvironmentObject private var model: OrderStore
     var onOpenStores: () -> Void = {}
-    @State private var showSendConfirmation = false
-    @State private var sendError = ""
     @State private var showBusinessCardScanner = false
     @State private var storeToRename: StoreOrder?
     @State private var renameText = ""
@@ -54,13 +52,6 @@ struct OrderView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
                 }
-                IVEXPrimaryButton(
-                    title: model.isSyncing ? "ИЗПРАЩАНЕ..." : "ИЗПРАТИ И ПРИКЛЮЧИ",
-                    icon: "icloud.and.arrow.up.fill",
-                    color: IVEXTheme.navy,
-                    disabled: model.isSyncing || model.stores.allSatisfy { $0.usedProducts.isEmpty },
-                    action: { showSendConfirmation = true }
-                )
             }
             .padding(.horizontal, 14)
             .padding(.top, 14)
@@ -78,27 +69,12 @@ struct OrderView: View {
         .sheet(isPresented: $showWechatQR) {
             WeChatQRView(data: model.settings.wechatQRData)
         }
-        .confirmationDialog("Да изпратя ли поръчката към IVEX Office?", isPresented: $showSendConfirmation) {
-            Button("Изпрати поръчката") {
-                Task {
-                    do { try await model.sendAndCompleteShopping() }
-                    catch { sendError = error.localizedDescription }
-                }
-            }
-            Button("Отказ", role: .cancel) {}
-        } message: {
-            Text("След успешно изпращане поръчката ще се премести в История.")
-        }
         .confirmationDialog("Да изтрия ли текущия магазин?", isPresented: $showDeleteStoreConfirmation) {
             if let store = model.selectedStore {
                 Button("Изтрий \(store.name)", role: .destructive) { model.deleteStore(store.id) }
             }
             Button("Отказ", role: .cancel) {}
         }
-        .alert("Поръчката не е изпратена", isPresented: Binding(
-            get: { !sendError.isEmpty },
-            set: { if !$0 { sendError = "" } }
-        )) { Button("Добре", role: .cancel) {} } message: { Text(sendError) }
         .alert("Преименувай магазин", isPresented: Binding(
             get: { storeToRename != nil },
             set: { if !$0 { storeToRename = nil } }

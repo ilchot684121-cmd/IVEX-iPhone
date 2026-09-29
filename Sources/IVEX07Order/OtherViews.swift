@@ -639,7 +639,7 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             IVEXSectionTitle(icon: "info.circle.fill", title: "ЗА ПРИЛОЖЕНИЕТО", color: IVEXTheme.blue)
                             IVEXReportRow(label: "Версия", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.4.1")
-                            IVEXReportRow(label: "Последна актуализация", value: "19.09.2026")
+                            IVEXReportRow(label: "Последна актуализация", value: "29.09.2026")
                             IVEXReportRow(label: "Магазини", value: "Динамични")
                             IVEXReportRow(label: "Режим", value: "Офлайн база данни + Excel")
                         }
@@ -711,19 +711,20 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             IVEXSectionTitle(
                                 icon: "person.fill",
-                                title: isFirstLaunch ? "РЕГИСТРАЦИЯ НА КЛИЕНТА" : "МОЯТ ПРОФИЛ",
+                                title: "ИМЕ НА КЛИЕНТА",
                                 color: IVEXTheme.blue
                             )
 
-                            StyledField(title: "Име и фамилия", text: $profile.name)
-                            StyledField(title: "Фирма", text: $profile.company)
-                            StyledField(title: "Телефон", text: $profile.phone, keyboard: .phonePad)
-                            StyledField(title: "Имейл", text: $profile.email, keyboard: .emailAddress, autocapitalization: .never)
+                            Text("Това име се вижда в IVEX07 Office, за да е ясно на кого е поръчката.")
+                                .font(.system(size: 14))
+                                .foregroundStyle(IVEXTheme.slate)
+
+                            StyledField(title: "Клиент / фирма", text: $profile.name)
 
                             IVEXPrimaryButton(
-                                title: isFirstLaunch ? "ЗАПОЧНИ РАБОТА" : "ЗАПАЗИ ПРОМЕНИТЕ",
-                                icon: "checkmark.circle.fill",
-                                color: IVEXTheme.green,
+                                title: "ЗАПАЗИ ИМЕТО",
+                                icon: "externaldrive.fill.badge.checkmark",
+                                color: IVEXTheme.blue,
                                 disabled: !profile.isComplete,
                                 action: { model.saveProfile(profile) }
                             )
