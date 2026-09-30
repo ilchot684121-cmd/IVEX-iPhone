@@ -33,6 +33,13 @@ struct RootView: View {
             }
         }
         .background(IVEXTheme.appBackground.ignoresSafeArea())
+        .task(id: model.profile.name) {
+            guard model.profile.isComplete else { return }
+            while !Task.isCancelled {
+                await model.receiveOfficeOrders()
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+            }
+        }
     }
 
     private var mainInterface: some View {
