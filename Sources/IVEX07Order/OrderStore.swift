@@ -105,6 +105,34 @@ final class OrderStore: ObservableObject {
         }
     }
 
+    func receiveOfficeOrders() async {
+        guard profile.isComplete else { return }
+        do {
+            let deliveries = try await syncService.receiveOfficeOrders(profile: profile, clientID: clientID)
+            var added = 0
+            for delivery in deliveries {
+                let alreadySaved = history.contains {
+                    $0.orderNumber == delivery.order.orderNumber && $0.number == delivery.order.number
+                }
+                if !alreadySaved {
+                    history.insert(delivery.order, at: 0)
+                    added += 1
+                }
+                try? await syncService.acknowledgeOfficeOrder(
+                    documentID: delivery.documentID,
+                    sourceOrderID: delivery.sourceOrderID,
+                    clientID: clientID
+                )
+            }
+            if added > 0 {
+                save()
+                markCloudConnected(added == 1 ? "Получена е поръчка от офиса" : "Получени са \(added) поръчки от офиса")
+            }
+        } catch {
+            // The periodic receiver retries automatically. Local work remains available.
+        }
+    }
+
     func deleteProduct(_ productID: UUID, from storeID: UUID) {
         guard let index = stores.firstIndex(where: { $0.id == storeID }) else { return }
         stores[index].products.removeAll { $0.id == productID }
