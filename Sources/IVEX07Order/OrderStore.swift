@@ -32,6 +32,28 @@ final class OrderStore: ObservableObject {
         stores.first { $0.id == selectedStoreID } ?? stores.first
     }
 
+    /// Match Android: use active shopping, or the latest completed shopping.
+    var storesForOfficeExport: [StoreOrder] {
+        let current = stores.filter { !$0.usedProducts.isEmpty }
+        if !current.isEmpty { return current }
+        let completed = history.filter { $0.completedAt != nil && !$0.usedProducts.isEmpty }
+        guard let latest = completed.max(by: {
+            ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast)
+        }), let date = latest.completedAt else { return [] }
+        return completed.filter {
+            if !latest.shoppingPeriodID.isEmpty {
+                return $0.shoppingPeriodID == latest.shoppingPeriodID
+            }
+            // Older versions assigned a timestamp separately to each store.
+            return abs(($0.completedAt ?? .distantPast).timeIntervalSince(date)) < 1
+        }.sorted { $0.number < $1.number }
+    }
+
+    var storeForSupplierExport: StoreOrder? {
+        if stores.contains(where: { !$0.usedProducts.isEmpty }) { return selectedStore }
+        return storesForOfficeExport.first
+    }
+
     func addStore() {
         let next = (stores.map(\.number).max() ?? 0) + 1
         let order = StoreOrder(
@@ -164,9 +186,12 @@ final class OrderStore: ObservableObject {
     }
 
     func completeShopping() {
+        let completedAt = Date()
+        let periodID = UUID().uuidString
         let completed = stores.filter { !$0.usedProducts.isEmpty }.map { value -> StoreOrder in
             var copy = value
-            copy.completedAt = Date()
+            copy.completedAt = completedAt
+            if copy.shoppingPeriodID.isEmpty { copy.shoppingPeriodID = periodID }
             return copy
         }
         history.insert(contentsOf: completed, at: 0)
@@ -193,7 +218,10 @@ final class OrderStore: ObservableObject {
     }
 
     func sendAndCompleteShopping() async throws {
-        let orders = stores.filter { !$0.usedProducts.isEmpty }
+        try await sendToOffice(stores.filter { !$0.usedProducts.isEmpty }, completeCurrent: true)
+    }
+
+    func sendToOffice(_ orders: [StoreOrder], completeCurrent: Bool) async throws {
         guard !orders.isEmpty else { return }
         isSyncing = true
         cloudConnectionState = .checking
@@ -205,7 +233,7 @@ final class OrderStore: ObservableObject {
                 try await syncService.send(order: order, profile: profile, clientID: clientID)
             }
             markCloudConnected("Поръчката е получена в офиса")
-            completeShopping()
+            if completeCurrent { completeShopping() }
         } catch {
             markCloudDisconnected()
             throw error
@@ -282,3 +310,4 @@ final class OrderStore: ObservableObject {
         return formatter.string(from: Date())
     }
 }
+

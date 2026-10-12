@@ -456,18 +456,13 @@ struct HistoryView: View {
 
 struct ExcelView: View {
     @EnvironmentObject private var model: OrderStore
-    @State private var currentStoreURL: URL?
-    @State private var allStoresURL: URL?
+    @State private var sharedFile: SharedExcelFile?
     @State private var sendError = ""
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 17) {
-                Text("Офис и Excel")
-                    .font(.system(size: 28, weight: .heavy))
-                    .foregroundStyle(IVEXTheme.text)
-
-                Text("Изпрати истински Excel файл със снимките на продуктите и визитката към търговеца или IVEX07 Office.")
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Изпрати Excel със снимките на продуктите и визитката към търговеца или IVEX07 Office.")
                     .font(.system(size: 16))
                     .foregroundStyle(IVEXTheme.slate)
 
@@ -475,82 +470,108 @@ struct ExcelView: View {
 
                 IVEXCard {
                     VStack(alignment: .leading, spacing: 0) {
-                        IVEXSectionTitle(icon: "building.columns.fill", title: "ОБОБЩЕНИЕ")
-                        IVEXReportRow(label: "Запазени магазини", value: "\(model.stores.count)")
-                        IVEXReportRow(label: "Обща стойност", value: String(format: "%.2f RMB", totalPrice))
-                        IVEXReportRow(label: "Общ обем", value: String(format: "%.4f CBM", totalCBM))
-                        IVEXReportRow(label: "Текущ магазин", value: "\(model.selectedStore?.number ?? 1)")
-                    }
-                }
-
-                if let currentStoreURL {
-                    ShareLink(item: currentStoreURL) {
-                        Label("ИЗПРАТИ МАГАЗИН \(model.selectedStore?.number ?? 1)", systemImage: "square.and.arrow.up.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .foregroundStyle(.white)
-                            .background(IVEXTheme.green)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .shadow(color: IVEXTheme.green.opacity(0.18), radius: 3, y: 2)
-                    }
-                } else {
-                    IVEXPrimaryButton(title: "СЪЗДАЙ ФАЙЛ ЗА ТЕКУЩИЯ МАГАЗИН", icon: "doc.badge.plus") {
-                        currentStoreURL = model.selectedStore.flatMap { model.xlsxURL(for: $0) }
-                    }
-                }
-
-                if let allStoresURL {
-                    ShareLink(item: allStoresURL) {
-                        Label("СПОДЕЛИ ОБЩИЯ EXCEL ФАЙЛ", systemImage: "square.and.arrow.up.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .foregroundStyle(.white)
-                            .background(IVEXTheme.blue)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                } else {
-                    IVEXPrimaryButton(title: "СЪЗДАЙ ОБЩ ФАЙЛ ЗА ОФИСА", icon: "building.2.crop.circle") {
-                        allStoresURL = model.xlsxURL()
+                        IVEXSectionTitle(icon: "tablecells.fill", title: "ОБОБЩЕНИЕ", color: IVEXTheme.greenDark)
+                            .padding(.bottom, 18)
+                        IVEXReportRow(label: "Запазени магазини", value: "\(model.storesForOfficeExport.count)")
+                        IVEXReportRow(label: "Обща стойност", value: formatted(totalPrice, digits: 2) + " RMB")
+                        IVEXReportRow(label: "Общ обем", value: formatted(totalCBM, digits: 4) + " CBM")
+                        IVEXReportRow(label: "Текущ магазин", value: "\(model.storeForSupplierExport?.number ?? 1)")
                     }
                 }
 
                 IVEXPrimaryButton(
-                    title: model.isSyncing ? "ИЗПРАЩАНЕ..." : "ИЗПРАТИ ПОРЪЧКИТЕ КЪМ ОФИСА",
-                    icon: "icloud.and.arrow.up.fill",
-                    color: IVEXTheme.blue,
-                    disabled: model.isSyncing || model.stores.allSatisfy { $0.usedProducts.isEmpty }
-                ) {
-                    Task {
-                        do { try await model.sendAndCompleteShopping() }
-                        catch { sendError = error.localizedDescription }
-                    }
-                }
+                    title: "ИЗПРАТИ МАГАЗИН \(model.storeForSupplierExport?.number ?? 1)",
+                    icon: "square.and.arrow.up",
+                    disabled: model.isSyncing || model.storeForSupplierExport?.usedProducts.isEmpty != false
+                ) { shareCurrentStore() }
 
-                Text("Един магазин изпраща само избрания магазин. Общият файл включва всички магазини, продуктови снимки, визитки и обобщение.")
-                    .font(.system(size: 13))
+                Text("Създава Excel само за Магазин \(model.storeForSupplierExport?.number ?? 1) и отваря менюто за изпращане към търговеца. Не го качва в офиса.")
+                    .font(.system(size: 16))
                     .foregroundStyle(IVEXTheme.slate)
+                    .lineSpacing(7)
+
+                IVEXPrimaryButton(
+                    title: model.isSyncing ? "ИЗПРАЩАНЕ..." : "ИЗПРАТИ ВСИЧКИ МАГАЗИНИ ДО ОФИСА",
+                    icon: "icloud.and.arrow.up.fill",
+                    disabled: model.isSyncing || model.storesForOfficeExport.isEmpty
+                ) { sendAllStores() }
+
+                Text("Качва всички магазини от текущото или последното приключено пазаруване в IVEX07 Office и след това отваря общия Excel за изпращане/архив.")
+                    .font(.system(size: 16))
+                    .foregroundStyle(IVEXTheme.slate)
+                    .lineSpacing(7)
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 20)
             .padding(.top, 20)
             .padding(.bottom, 34)
         }
         .background(IVEXTheme.appBackground)
         .task { await model.checkCloudConnection() }
-        .alert("Поръчката не е изпратена", isPresented: Binding(
+        .sheet(item: $sharedFile) { file in
+            ExcelShareSheet(url: file.url)
+        }
+        .alert("Изпращането не е завършено", isPresented: Binding(
             get: { !sendError.isEmpty },
             set: { if !$0 { sendError = "" } }
         )) { Button("Добре", role: .cancel) {} } message: { Text(sendError) }
     }
 
     private var totalPrice: Double {
-        model.stores.reduce(0) { $0 + $1.totalPrice }
+        model.storesForOfficeExport.reduce(0) { $0 + $1.totalPrice }
     }
 
     private var totalCBM: Double {
-        model.stores.reduce(0) { $0 + $1.totalCBM }
+        model.storesForOfficeExport.reduce(0) { $0 + $1.totalCBM }
     }
+
+    private func formatted(_ value: Double, digits: Int) -> String {
+        String(format: "%.*f", locale: Locale(identifier: "bg_BG"), digits, value)
+    }
+
+    private func shareCurrentStore() {
+        guard let store = model.storeForSupplierExport else { return }
+        guard let url = model.xlsxURL(for: store) else {
+            sendError = "Excel файлът не беше създаден. Поръчката е запазена в телефона."
+            return
+        }
+        sharedFile = SharedExcelFile(url: url)
+    }
+
+    private func sendAllStores() {
+        // Snapshot before sending clears active shopping. Export fresh data on every tap.
+        let orders = model.storesForOfficeExport
+        let completeCurrent = model.stores.contains { !$0.usedProducts.isEmpty }
+        guard !orders.isEmpty else { return }
+        guard let url = XLSXExporter.makeFile(
+            stores: orders, profile: model.profile, settings: model.settings, suffix: "All_Stores"
+        ) else {
+            sendError = "Excel файлът не беше създаден. Поръчките са запазени в телефона."
+            return
+        }
+        Task { @MainActor in
+            do {
+                try await model.sendToOffice(orders, completeCurrent: completeCurrent)
+                sharedFile = SharedExcelFile(url: url)
+            } catch {
+                sendError = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct SharedExcelFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ExcelShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private struct CloudConnectionCard: View {
@@ -818,3 +839,4 @@ private struct IVEXWideButtonStyle: ButtonStyle {
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 }
+
