@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 struct OfficeDelivery {
     let documentID: String
@@ -10,9 +11,11 @@ enum IVEXSyncError: LocalizedError {
     case invalidResponse
     case server(Int, String)
     case authentication(String)
+    case photo(String)
 
     var errorDescription: String? {
         switch self {
+        case let .photo(message): return message
         case .invalidResponse: return "Няма валиден отговор от облака."
         case let .server(code, message): return "Облакът върна грешка \(code): \(message)"
         case let .authentication(message): return "Неуспешна връзка с облака: \(message)"
@@ -36,7 +39,7 @@ final class FirebaseSyncService {
             "clientId": value(clientID), "clientName": value(profile.name),
             "company": value(profile.company), "phone": value(profile.phone),
             "email": value(profile.email), "authUid": value(auth.localID),
-            "platform": value("ios"), "appVersion": value("0.5.7"),
+            "platform": value("ios"), "appVersion": value("0.5.9"),
             "active": value(true), "updatedAt": timestampValue(now),
             "createdAt": timestampValue(now)
         ]
@@ -45,8 +48,15 @@ final class FirebaseSyncService {
 
     func send(order: StoreOrder, profile: ClientProfile, clientID: String) async throws {
         let auth = try await validAuthToken()
-        let products = order.usedProducts.map { product -> [String: Any] in
-            ["mapValue": ["fields": [
+        let safeOrderNumber = order.orderNumber.replacingOccurrences(
+            of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression
+        )
+        let basePath = "orders/\(auth.localID)/\(safeOrderNumber)/stores/\(order.number)"
+        // A new upload batch preserves the last committed order if a retry fails.
+        let batchID = UUID().uuidString
+        var products: [[String: Any]] = []
+        for product in order.usedProducts {
+            var productFields: [String: Any] = [
                 "id": value(product.id.uuidString), "name": value(product.name),
                 "cartons": value(product.cartons), "pcsPerCarton": value(product.piecesPerCarton),
                 "totalQuantity": value(product.totalQuantity), "unitPrice": value(product.unitPrice),
@@ -54,7 +64,18 @@ final class FirebaseSyncService {
                 "totalCubicMeters": value(product.totalCBM), "note": value(product.note),
                 "productStatus": value(product.status.rawValue), "statusNote": value(product.statusNote),
                 "hasLocalPhoto": value(product.photoData != nil)
-            ]]]
+            ]
+            if let source = product.photoData {
+                let path = "\(basePath)/products/\(product.id.uuidString)-\(batchID).jpg"
+                try await uploadPhoto(source, path: path, label: product.name)
+                productFields["photoStoragePath"] = value(path)
+            }
+            products.append(["mapValue": ["fields": productFields]])
+        }
+        var businessCardPath = ""
+        if let source = order.businessCardData {
+            businessCardPath = "\(basePath)/business_card-\(batchID).jpg"
+            try await uploadPhoto(source, path: businessCardPath, label: "Визитка")
         }
         let now = Self.timestamp()
         let fields: [String: Any] = [
@@ -70,17 +91,53 @@ final class FirebaseSyncService {
             "orderStatus": value(order.orderStatus.rawValue),
             "shoppingPeriodId": value(order.shoppingPeriodID.isEmpty ? Self.period() : order.shoppingPeriodID),
             "hasLocalBusinessCard": value(order.businessCardData != nil),
+            "businessCardStoragePath": value(businessCardPath),
             "sourcePlatform": value("ios"), "cloudSchemaVersion": value(8),
-            "appVersion": value("0.5.7"), "createdAt": timestampValue(now),
+            "appVersion": value("0.5.9"), "createdAt": timestampValue(now),
             "updatedAt": timestampValue(now)
         ]
-        let safeOrderNumber = order.orderNumber.replacingOccurrences(
-            of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression
-        )
+        let writeAuth = try await validAuthToken()
         try await write(
             collection: "orders", documentID: "\(clientID)_\(safeOrderNumber)",
-            fields: fields, idToken: auth.idToken
+            fields: fields, idToken: writeAuth.idToken
         )
+    }
+
+    private func uploadPhoto(_ source: Data, path: String, label: String) async throws {
+        guard let image = UIImage(data: source),
+              let jpeg = image.jpegData(compressionQuality: 0.82), !jpeg.isEmpty else {
+            throw IVEXSyncError.photo("Снимката за „\(label)“ не може да бъде прочетена. Поръчката е запазена в телефона.")
+        }
+        do {
+            let auth = try await validAuthToken()
+            let bucket = "\(projectID).firebasestorage.app"
+            var components = URLComponents(string: "https://firebasestorage.googleapis.com/v0/b/\(bucket)/o")
+            components?.queryItems = [URLQueryItem(name: "name", value: path)]
+            guard let url = components?.url else { throw IVEXSyncError.invalidResponse }
+            let boundary = "ivex-" + UUID().uuidString
+            let metadata = try JSONSerialization.data(withJSONObject: ["name": path, "contentType": "image/jpeg"])
+            var body = Data("--\(boundary)\r\nContent-Type: application/json; charset=utf-8\r\n\r\n".utf8)
+            body.append(metadata)
+            body.append(Data("\r\n--\(boundary)\r\nContent-Type: image/jpeg\r\n\r\n".utf8))
+            body.append(jpeg)
+            body.append(Data("\r\n--\(boundary)--".utf8))
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 60
+            request.setValue("Firebase \(auth.idToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("multipart", forHTTPHeaderField: "X-Goog-Upload-Protocol")
+            request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+            try validate(response: response, data: data, authentication: false)
+            guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  result["name"] as? String == path,
+                  result["bucket"] as? String == bucket,
+                  let size = result["size"] as? String, Int(size) == jpeg.count else {
+                throw IVEXSyncError.invalidResponse
+            }
+        } catch {
+            throw IVEXSyncError.photo("Снимката за „\(label)“ не беше изпратена. Поръчката е запазена в телефона.\n\n" + error.localizedDescription)
+        }
     }
 
     func receiveOfficeOrders(profile: ClientProfile, clientID: String) async throws -> [OfficeDelivery] {
@@ -331,3 +388,4 @@ private struct AuthToken: Codable {
     }
     static func clear() { UserDefaults.standard.removeObject(forKey: storageKey) }
 }
+

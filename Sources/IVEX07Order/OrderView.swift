@@ -566,14 +566,18 @@ private struct InlineProductCard: View {
         .shadow(color: IVEXTheme.navy.opacity(0.1), radius: 3, y: 2)
         .onChange(of: product) { _, value in model.updateProduct(value, in: storeID) }
         .onChange(of: selectedPhoto) { _, newValue in
-            Task {
+            Task { @MainActor in
                 if let data = try? await newValue?.loadTransferable(type: Data.self) {
                     product.photoData = data
+                    model.updateProduct(product, in: storeID)
                 }
             }
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraImagePicker { image in product.photoData = image.jpegData(compressionQuality: 0.88) }
+            CameraImagePicker { image in
+                product.photoData = image.jpegData(compressionQuality: 0.88)
+                model.updateProduct(product, in: storeID)
+            }
                 .ignoresSafeArea()
         }
     }
@@ -682,3 +686,4 @@ private struct ProductEditor: View {
         }
     }
 }
+

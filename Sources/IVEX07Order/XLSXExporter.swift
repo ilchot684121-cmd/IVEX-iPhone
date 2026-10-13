@@ -16,6 +16,7 @@ enum XLSXExporter {
             let sheetNumber = index + 1
             var pictures: [(relationship: String, mediaName: String, title: String, anchor: String)] = []
 
+            if store.businessCardData != nil && jpegData(store.businessCardData) == nil { return nil }
             if let data = jpegData(store.businessCardData) {
                 let mediaName = "ivex_store_\(store.number)_business_card.jpg"
                 media.append((mediaName, data))
@@ -23,6 +24,7 @@ enum XLSXExporter {
             }
 
             for (productIndex, product) in store.usedProducts.prefix(97).enumerated() {
+                if product.photoData != nil && jpegData(product.photoData) == nil { return nil }
                 if let data = jpegData(product.photoData) {
                     let mediaName = "ivex_store_\(store.number)_photo_\(productIndex + 1).jpg"
                     media.append((mediaName, data))
@@ -149,7 +151,11 @@ enum XLSXExporter {
 
     private static func sheetDrawingRelationship(_ drawingIndex: Int) -> String { "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing\(drawingIndex).xml\"/></Relationships>" }
     private static func businessCardAnchor() -> String { "<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>60000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>60000</xdr:rowOff></xdr:from><xdr:ext cx=\"1750000\" cy=\"950000\"/>" }
-    private static func productAnchor(row: Int) -> String { "<xdr:twoCellAnchor editAs=\"oneCell\"><xdr:from><xdr:col>8</xdr:col><xdr:colOff>50000</xdr:colOff><xdr:row>\(row)</xdr:row><xdr:rowOff>50000</xdr:rowOff></xdr:from><xdr:to><xdr:col>9</xdr:col><xdr:colOff>-50000</xdr:colOff><xdr:row>\(row + 1)</xdr:row><xdr:rowOff>-50000</xdr:rowOff></xdr:to>" }
+    private static func productAnchor(row: Int) -> String {
+        // Fixed positive dimensions also work in mobile spreadsheet viewers.
+        // Negative offsets in the old two-cell anchor made some viewers hide photos.
+        "<xdr:oneCellAnchor><xdr:from><xdr:col>8</xdr:col><xdr:colOff>50000</xdr:colOff><xdr:row>\(row)</xdr:row><xdr:rowOff>50000</xdr:rowOff></xdr:from><xdr:ext cx=\"1050000\" cy=\"650000\"/>"
+    }
 
     private static func jpegData(_ source: Data?) -> Data? {
         guard let source, let image = UIImage(data: source) else { return nil }
@@ -201,3 +207,4 @@ private enum CRC32 {
 private extension Data {
     mutating func appendLE<T: FixedWidthInteger>(_ value: T) { var little = value.littleEndian; Swift.withUnsafeBytes(of: &little) { append(contentsOf: $0) } }
 }
+
