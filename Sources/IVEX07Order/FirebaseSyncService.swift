@@ -36,7 +36,7 @@ final class FirebaseSyncService {
             "clientId": value(clientID), "clientName": value(profile.name),
             "company": value(profile.company), "phone": value(profile.phone),
             "email": value(profile.email), "authUid": value(auth.localID),
-            "platform": value("ios"), "appVersion": value("0.5.7"),
+            "platform": value("ios"), "appVersion": value("0.5.8"),
             "active": value(true), "updatedAt": timestampValue(now),
             "createdAt": timestampValue(now)
         ]
@@ -71,7 +71,7 @@ final class FirebaseSyncService {
             "shoppingPeriodId": value(order.shoppingPeriodID.isEmpty ? Self.period() : order.shoppingPeriodID),
             "hasLocalBusinessCard": value(order.businessCardData != nil),
             "sourcePlatform": value("ios"), "cloudSchemaVersion": value(8),
-            "appVersion": value("0.5.7"), "createdAt": timestampValue(now),
+            "appVersion": value("0.5.8"), "createdAt": timestampValue(now),
             "updatedAt": timestampValue(now)
         ]
         let safeOrderNumber = order.orderNumber.replacingOccurrences(
@@ -135,6 +135,7 @@ final class FirebaseSyncService {
                 products: products,
                 depositRmb: fieldDouble(fields, "depositRmb"),
                 shoppingPeriodID: fieldString(fields, "shoppingPeriodId"),
+                isFromOffice: true,
                 completedAt: Date()
             )
             return OfficeDelivery(
