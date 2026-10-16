@@ -60,6 +60,7 @@ struct StoreOrder: Identifiable, Codable, Equatable {
     var depositRmb = 0.0
     var orderStatus: OrderStatus = .sentToOffice
     var shoppingPeriodID = ""
+    var isFromOffice = false
     var sentToSupplier = false
     var completedAt: Date?
 
@@ -70,7 +71,7 @@ struct StoreOrder: Identifiable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, number, name, orderNumber, products, businessCardData, depositRmb
-        case orderStatus, shoppingPeriodID, sentToSupplier, completedAt
+        case orderStatus, shoppingPeriodID, isFromOffice, sentToSupplier, completedAt
     }
 
     init(
@@ -83,6 +84,7 @@ struct StoreOrder: Identifiable, Codable, Equatable {
         depositRmb: Double = 0,
         orderStatus: OrderStatus = .sentToOffice,
         shoppingPeriodID: String = "",
+        isFromOffice: Bool = false,
         sentToSupplier: Bool = false,
         completedAt: Date? = nil
     ) {
@@ -95,6 +97,7 @@ struct StoreOrder: Identifiable, Codable, Equatable {
         self.depositRmb = depositRmb
         self.orderStatus = orderStatus
         self.shoppingPeriodID = shoppingPeriodID
+        self.isFromOffice = isFromOffice
         self.sentToSupplier = sentToSupplier
         self.completedAt = completedAt
     }
@@ -110,6 +113,7 @@ struct StoreOrder: Identifiable, Codable, Equatable {
         depositRmb = try values.decodeIfPresent(Double.self, forKey: .depositRmb) ?? 0
         orderStatus = try values.decodeIfPresent(OrderStatus.self, forKey: .orderStatus) ?? .sentToOffice
         shoppingPeriodID = try values.decodeIfPresent(String.self, forKey: .shoppingPeriodID) ?? ""
+        isFromOffice = try values.decodeIfPresent(Bool.self, forKey: .isFromOffice) ?? false
         sentToSupplier = try values.decodeIfPresent(Bool.self, forKey: .sentToSupplier) ?? false
         completedAt = try values.decodeIfPresent(Date.self, forKey: .completedAt)
     }
