@@ -228,6 +228,7 @@ final class OrderStore: ObservableObject {
         copy.id = UUID()
         copy.number = (stores.map(\.number).max() ?? 0) + 1
         copy.orderNumber = Self.makeOrderNumber()
+        copy.isFromOffice = false
         copy.sentToSupplier = false
         copy.completedAt = nil
         copy.products = copy.products.map { item in
