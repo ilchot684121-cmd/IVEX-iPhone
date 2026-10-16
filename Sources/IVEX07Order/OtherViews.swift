@@ -275,7 +275,7 @@ struct HistoryView: View {
                                     subtitle: "\(period.stores.count) магазина",
                                     expanded: periodOpen,
                                     level: 1,
-                                    purple: true
+                                    purple: period.stores.contains(where: \.isFromOffice)
                                 ) {
                                     togglePeriod(period.key)
                                 }
@@ -345,7 +345,7 @@ struct HistoryView: View {
             HStack(spacing: 11) {
                 Image(systemName: expanded ? "folder.fill.badge.minus" : "folder.fill")
                     .font(.system(size: level == 0 ? 27 : 23, weight: .semibold))
-                    .foregroundStyle(purple ? IVEXTheme.violet : IVEXTheme.greenDark)
+                    .foregroundStyle(purple ? IVEXTheme.violet : IVEXTheme.amber)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(size: level == 0 ? 18 : 15, weight: .heavy))
@@ -361,7 +361,7 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 15)
             .frame(minHeight: level == 0 ? 76 : 68)
-            .background(purple ? IVEXTheme.violetSoft : (level == 0 ? Color(red: 231 / 255, green: 248 / 255, blue: 237 / 255) : IVEXTheme.cardBackground))
+            .background(purple ? IVEXTheme.violetSoft : Color(red: 255 / 255, green: 248 / 255, blue: 225 / 255))
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
             .shadow(color: IVEXTheme.navy.opacity(0.07), radius: 2, y: 1)
             .padding(.leading, level == 0 ? 0 : 14)
