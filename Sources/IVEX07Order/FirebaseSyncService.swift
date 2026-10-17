@@ -36,7 +36,7 @@ final class FirebaseSyncService {
             "clientId": value(clientID), "clientName": value(profile.name),
             "company": value(profile.company), "phone": value(profile.phone),
             "email": value(profile.email), "authUid": value(auth.localID),
-            "platform": value("ios"), "appVersion": value("0.5.10"),
+            "platform": value("ios"), "appVersion": value("0.5.11"),
             "active": value(true), "updatedAt": timestampValue(now),
             "createdAt": timestampValue(now)
         ]
@@ -71,7 +71,7 @@ final class FirebaseSyncService {
             "shoppingPeriodId": value(order.shoppingPeriodID.isEmpty ? Self.period() : order.shoppingPeriodID),
             "hasLocalBusinessCard": value(order.businessCardData != nil),
             "sourcePlatform": value("ios"), "cloudSchemaVersion": value(8),
-            "appVersion": value("0.5.10"), "createdAt": timestampValue(now),
+            "appVersion": value("0.5.11"), "createdAt": timestampValue(now),
             "updatedAt": timestampValue(now)
         ]
         let safeOrderNumber = order.orderNumber.replacingOccurrences(
@@ -96,17 +96,19 @@ final class FirebaseSyncService {
             throw IVEXSyncError.invalidResponse
         }
         let cleanName = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (root["documents"] as? [[String: Any]] ?? []).compactMap { document in
+        var deliveries: [OfficeDelivery] = []
+        for document in (root["documents"] as? [[String: Any]] ?? []) {
             guard let fields = document["fields"] as? [String: Any],
                   fieldBool(fields, "officeCreated"),
-                  fieldBool(fields, "deliverToAppHistory") else { return nil }
+                  fieldBool(fields, "deliverToAppHistory") else { continue }
             let targetID = fieldString(fields, "recipientClientId").isEmpty
                 ? fieldString(fields, "clientId") : fieldString(fields, "recipientClientId")
             let targetName = fieldString(fields, "clientName")
             guard targetID == clientID || (!cleanName.isEmpty && targetName.caseInsensitiveCompare(cleanName) == .orderedSame) else {
-                return nil
+                continue
             }
-            let products = fieldArray(fields, "products").compactMap { raw -> ProductLine? in
+            let rawProducts = fieldArray(fields, "products")
+            var products = rawProducts.compactMap { raw -> ProductLine? in
                 guard let map = raw["mapValue"] as? [String: Any],
                       let values = map["fields"] as? [String: Any] else { return nil }
                 let name = fieldString(values, "name").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -123,27 +125,56 @@ final class FirebaseSyncService {
                     statusNote: fieldString(values, "statusNote")
                 )
             }
-            guard !products.isEmpty else { return nil }
+            guard !products.isEmpty else { continue }
+            for index in products.indices where index < rawProducts.count {
+                guard let map = rawProducts[index]["mapValue"] as? [String: Any],
+                      let values = map["fields"] as? [String: Any] else { continue }
+                let storagePath = fieldString(values, "photoStoragePath")
+                if !storagePath.isEmpty {
+                    products[index].photoData = try? await downloadStorageFile(
+                        path: storagePath, idToken: auth.idToken
+                    )
+                }
+            }
             let documentName = document["name"] as? String ?? ""
             let documentID = documentName.split(separator: "/").last.map(String.init) ?? ""
-            guard !documentID.isEmpty else { return nil }
+            guard !documentID.isEmpty else { continue }
             let storeNumber = max(1, Int(fieldDouble(fields, "storeNumber")))
+            let businessCardPath = fieldString(fields, "businessCardStoragePath")
+            let businessCardData = businessCardPath.isEmpty ? nil : try? await downloadStorageFile(
+                path: businessCardPath, idToken: auth.idToken
+            )
             let order = StoreOrder(
                 number: storeNumber,
                 name: fieldString(fields, "storeName").isEmpty ? "Магазин \(storeNumber)" : fieldString(fields, "storeName"),
                 orderNumber: fieldString(fields, "orderNumber"),
                 products: products,
+                businessCardData: businessCardData,
                 depositRmb: fieldDouble(fields, "depositRmb"),
                 shoppingPeriodID: fieldString(fields, "shoppingPeriodId"),
                 isFromOffice: true,
                 completedAt: Date()
             )
-            return OfficeDelivery(
+            deliveries.append(OfficeDelivery(
                 documentID: documentID,
                 sourceOrderID: fieldString(fields, "sourceOrderId"),
                 order: order
-            )
+            ))
         }
+        return deliveries
+    }
+
+    private func downloadStorageFile(path: String, idToken: String) async throws -> Data {
+        let encodedPath = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)?
+            .replacingOccurrences(of: "/", with: "%2F") ?? path
+        let endpoint = "https://firebasestorage.googleapis.com/v0/b/\(projectID).firebasestorage.app/o/\(encodedPath)?alt=media"
+        guard let url = URL(string: endpoint) else { throw IVEXSyncError.invalidResponse }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 25
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data, authentication: false)
+        return data
     }
 
     func acknowledgeOfficeOrder(documentID: String, sourceOrderID: String, clientID: String) async throws {
