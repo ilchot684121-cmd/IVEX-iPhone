@@ -28,6 +28,7 @@ final class FirebaseSyncService {
     private let databaseID = "(default)"
     private let apiKey = "AIzaSyB_Rzg4ChIlHHBFfuEo2TQe2QzD-cicoIM"
     private var cachedToken: AuthToken?
+    private var storageCache: [String: Data] = [:]
 
     func register(profile: ClientProfile, clientID: String) async throws {
         let auth = try await validAuthToken()
@@ -165,6 +166,7 @@ final class FirebaseSyncService {
     }
 
     private func downloadStorageFile(path: String, idToken: String) async throws -> Data {
+        if let cached = storageCache[path] { return cached }
         let encodedPath = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)?
             .replacingOccurrences(of: "/", with: "%2F") ?? path
         let endpoint = "https://firebasestorage.googleapis.com/v0/b/\(projectID).firebasestorage.app/o/\(encodedPath)?alt=media"
@@ -174,6 +176,7 @@ final class FirebaseSyncService {
         request.timeoutInterval = 25
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data, authentication: false)
+        storageCache[path] = data
         return data
     }
 
