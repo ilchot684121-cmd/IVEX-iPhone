@@ -111,10 +111,20 @@ final class OrderStore: ObservableObject {
             let deliveries = try await syncService.receiveOfficeOrders(profile: profile, clientID: clientID)
             var added = 0
             for delivery in deliveries {
-                let alreadySaved = history.contains {
+                let existingIndex = history.firstIndex {
                     $0.orderNumber == delivery.order.orderNumber && $0.number == delivery.order.number
                 }
-                if !alreadySaved {
+                if let existingIndex {
+                    let existing = history[existingIndex]
+                    let incomingHasImages = delivery.order.businessCardData != nil
+                        || delivery.order.products.contains { $0.photoData != nil }
+                    let existingHasImages = existing.businessCardData != nil
+                        || existing.products.contains { $0.photoData != nil }
+                    if incomingHasImages && !existingHasImages {
+                        history[existingIndex] = delivery.order
+                        added += 1
+                    }
+                } else {
                     history.insert(delivery.order, at: 0)
                     added += 1
                 }
